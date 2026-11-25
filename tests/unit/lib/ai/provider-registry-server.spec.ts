@@ -5,9 +5,11 @@ vi.mock("server-only", () => ({}));
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: vi.fn() }));
 vi.mock("@ai-sdk/deepseek", () => ({ createDeepSeek: vi.fn() }));
 vi.mock("@ai-sdk/google", () => ({ createGoogleGenerativeAI: vi.fn() }));
+vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic: vi.fn() }));
 vi.mock("ollama-ai-provider-v2", () => ({ createOllama: vi.fn() }));
 
 import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import {
   PROVIDER_FACTORIES,
   PROVIDER_VERIFIERS,
@@ -143,5 +145,52 @@ describe("PROVIDER_FACTORIES – openrouter", () => {
     expect(createOpenAI).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: "sk-or-specific-key" }),
     );
+  });
+});
+
+describe("PROVIDER_VERIFIERS – anthropic", () => {
+  it("verifies with x-api-key and anthropic-version headers", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    const result = await PROVIDER_VERIFIERS.anthropic("sk-ant-valid");
+
+    expect(result).toEqual({ success: true });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.anthropic.com/v1/models",
+      {
+        headers: { "x-api-key": "sk-ant-valid", "anthropic-version": "2023-06-01" },
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
+  it("returns 'Invalid API key' on 401", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+    expect(await PROVIDER_VERIFIERS.anthropic("bad")).toEqual({
+      success: false,
+      error: "Invalid API key",
+    });
+  });
+
+  it("reports other statuses", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 529 });
+    expect(await PROVIDER_VERIFIERS.anthropic("k")).toEqual({
+      success: false,
+      error: "Anthropic returned 529",
+    });
+  });
+});
+
+describe("PROVIDER_FACTORIES – anthropic", () => {
+  it("uses createAnthropic with the key and passes the model through", () => {
+    const mockModelInstance = { modelId: "claude-sonnet-5-5" };
+    const mockChainFn = vi.fn().mockReturnValue(mockModelInstance);
+    (createAnthropic as any).mockReturnValue(mockChainFn);
+
+    const result = PROVIDER_FACTORIES.anthropic("sk-ant-key", "claude-sonnet-5-5");
+
+    expect(createAnthropic).toHaveBeenCalledWith({ apiKey: "sk-ant-key" });
+    expect(mockChainFn).toHaveBeenCalledWith("claude-sonnet-5-5");
+    expect(result).toBe(mockModelInstance);
   });
 });

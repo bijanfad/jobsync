@@ -44,6 +44,7 @@ export const AI_PROVIDER_LABELS: Record<string, string> = {
   deepseek: "DeepSeek",
   gemini: "Gemini",
   openrouter: "OpenRouter",
+  anthropic: "Claude",
 };
 
 export type AiUsageRange = 7 | 30;

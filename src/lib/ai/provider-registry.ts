@@ -97,6 +97,27 @@ export const PROVIDER_REGISTRY: Record<string, ProviderRegistryEntry> = {
     },
   },
 
+  anthropic: {
+    id: "anthropic",
+    displayName: "Anthropic (Claude)",
+    credentialType: "api-key",
+    category: "cloud",
+    envVar: "ANTHROPIC_API_KEY",
+    modelsEndpoint: "anthropic/models",
+    parseModelsResponse: (data) =>
+      (data.data?.map((m: any) => m.id) ?? []).filter((id: string) =>
+        id.startsWith("claude-"),
+      ),
+    requiresRunningCheck: false,
+    supportsKeepAlive: false,
+    keyConfig: {
+      placeholder: "sk-ant-...",
+      inputType: "password",
+      description: "Used for Claude models in resume review and job matching",
+      sensitive: true,
+    },
+  },
+
   gemini: {
     id: "gemini",
     displayName: "Google Gemini",
@@ -117,7 +138,7 @@ export const PROVIDER_REGISTRY: Record<string, ProviderRegistryEntry> = {
   },
 };
 
-export const AI_PROVIDERS = ["ollama", "openai", "deepseek", "openrouter", "gemini"] as const;
+export const AI_PROVIDERS = ["ollama", "openai", "deepseek", "openrouter", "gemini", "anthropic"] as const;
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
 export function getAiProviders(): ProviderRegistryEntry[] {

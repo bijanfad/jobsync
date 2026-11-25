@@ -59,6 +59,7 @@ export const PROVIDER_COLORS: Record<
     openai: "#14B8A6",
     gemini: "#C4B5FD",
     openrouter: "#F472B6",
+    anthropic: "#FB923C",
   },
   light: {
     ollama: "#2563EB",
@@ -66,6 +67,7 @@ export const PROVIDER_COLORS: Record<
     openai: "#0D9488",
     gemini: "#7C3AED",
     openrouter: "#DB2777",
+    anthropic: "#C2410C",
   },
 };
 
