@@ -5,11 +5,11 @@ describe("AI_PROVIDERS", () => {
     expect(AI_PROVIDERS).toContain("openrouter");
   });
 
-  it("contains exactly 5 providers", () => {
-    expect(AI_PROVIDERS).toHaveLength(5);
+  it("contains exactly 6 providers", () => {
+    expect(AI_PROVIDERS).toHaveLength(6);
   });
 
-  it("contains ollama, openai, deepseek, openrouter, gemini", () => {
+  it("contains ollama, openai, deepseek, openrouter, gemini, anthropic", () => {
     expect(AI_PROVIDERS).toEqual(
       expect.arrayContaining([
         "ollama",
@@ -17,6 +17,7 @@ describe("AI_PROVIDERS", () => {
         "deepseek",
         "openrouter",
         "gemini",
+        "anthropic",
       ]),
     );
   });
@@ -132,5 +133,33 @@ describe("PROVIDER_REGISTRY – openrouter entry", () => {
         "meta-llama/llama-3-8b",
       ]);
     });
+  });
+});
+
+describe("PROVIDER_REGISTRY – anthropic entry", () => {
+  const entry = PROVIDER_REGISTRY.anthropic;
+
+  it("is a cloud api-key provider read from ANTHROPIC_API_KEY", () => {
+    expect(entry).toBeDefined();
+    expect(entry.credentialType).toBe("api-key");
+    expect(entry.category).toBe("cloud");
+    expect(entry.envVar).toBe("ANTHROPIC_API_KEY");
+    expect(entry.keyConfig.sensitive).toBe(true);
+  });
+
+  it("lists models from its own models route", () => {
+    expect(entry.modelsEndpoint).toBe("anthropic/models");
+  });
+
+  it("parses only claude- model ids from the models response", () => {
+    expect(
+      entry.parseModelsResponse!({
+        data: [{ id: "claude-sonnet-5-5" }, { id: "claude-haiku-5-5" }, { id: "other" }],
+      }),
+    ).toEqual(["claude-sonnet-5-5", "claude-haiku-5-5"]);
+  });
+
+  it("returns [] for a malformed response", () => {
+    expect(entry.parseModelsResponse!({})).toEqual([]);
   });
 });
