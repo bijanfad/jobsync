@@ -18,6 +18,9 @@ export const APP_CONSTANTS = {
   ATS_COMPANY_PAGE_SIZE: 50,
   MAX_AUTOMATIONS_PER_USER: 10,
   MAX_JOB_TAGS: 10,
+  // Reading a page and writing out its full description can take a while on
+  // a local model; past this the Add Job form gives up and says so.
+  JOB_IMPORT_TIMEOUT_MS: 180_000,
   // Due date given to a new job when none is supplied, on every creation path
   DEFAULT_JOB_DUE_DAYS: 3,
   MIN_QUESTION_LENGTH: 5,

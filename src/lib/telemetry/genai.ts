@@ -11,6 +11,7 @@ export const SURFACES = {
   COVER_LETTER: "cover.letter",
   AUTOMATION_MATCH: "automation.match",
   RESUME_IMPORT: "resume.import",
+  JOB_IMPORT: "job.import",
 } as const;
 
 export type Surface = (typeof SURFACES)[keyof typeof SURFACES];
