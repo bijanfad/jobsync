@@ -353,6 +353,13 @@ export function AddJob({
         location: form.getValues("location"),
         source: form.getValues("source"),
       });
+      if (job.descriptionTooShort) {
+        toastError(
+          "The posting's full text couldn't be read from this page, so Job Match won't work yet. Copy the job description from the site into Job Description before saving.",
+          "Filled, but the description is missing",
+        );
+        return;
+      }
       toastSuccess(
         missingAfter.length
           ? "Check the details, and fill in what the posting didn't say."

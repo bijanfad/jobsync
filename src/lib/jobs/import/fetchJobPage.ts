@@ -13,12 +13,32 @@ const TIMEOUT_MS = 15_000;
 const MAX_BYTES = 3 * 1024 * 1024;
 
 // Many career sites refuse requests that do not look like a browser.
-const BROWSER_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
-  Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "en,de;q=0.8,*;q=0.5",
-};
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
+
+const GERMAN_HOST = /\.(de|at|ch)$/i;
+const GERMAN_PATH = /(^|[\/_-])(de|de-de|de_de|de-at|de-ch)([\/_?-]|$)/i;
+
+/**
+ * Asks for the posting's own language. Careers sites that serve postings in
+ * one language often redirect a request preferring another to a listing or a
+ * "not available in English" page, so an English preference on a German link
+ * loses the posting.
+ */
+export function acceptLanguageFor(url: URL): string {
+  const lang = url.searchParams.get("lang") ?? url.searchParams.get("locale") ?? "";
+  const german =
+    /^de/i.test(lang) || GERMAN_PATH.test(url.pathname) || GERMAN_HOST.test(url.hostname);
+  return german ? "de-DE,de;q=0.9,en;q=0.7,*;q=0.5" : "en,de;q=0.8,*;q=0.5";
+}
+
+function browserHeaders(url: URL): Record<string, string> {
+  return {
+    "User-Agent": USER_AGENT,
+    Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": acceptLanguageFor(url),
+  };
+}
 
 export class JobPageFetchError extends Error {
   constructor(message: string) {
@@ -92,6 +112,27 @@ async function assertPublicHost(url: URL): Promise<void> {
   }
 }
 
+/**
+ * Older German career sites still serve ISO-8859-1 or windows-1252, which
+ * decoded as UTF-8 turns every umlaut and ß into a replacement character.
+ * The header wins, then a <meta charset> in the first bytes, then UTF-8.
+ */
+export function detectCharset(contentType: string, head: Uint8Array): string {
+  const fromHeader = contentType.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1];
+  const sniff = new TextDecoder("latin1").decode(head.subarray(0, 4096));
+  const fromMeta =
+    sniff.match(/<meta[^>]+charset\s*=\s*["']?([\w-]+)/i)?.[1];
+  for (const label of [fromHeader, fromMeta]) {
+    if (!label) continue;
+    try {
+      return new TextDecoder(label).encoding;
+    } catch {
+      // Unknown label: try the next source.
+    }
+  }
+  return "utf-8";
+}
+
 async function readCapped(res: Response): Promise<string> {
   if (!res.body) return "";
   const reader = res.body.getReader();
@@ -107,7 +148,9 @@ async function readCapped(res: Response): Promise<string> {
     }
     chunks.push(value);
   }
-  return new TextDecoder("utf-8").decode(Buffer.concat(chunks));
+  const bytes = Buffer.concat(chunks);
+  const charset = detectCharset(res.headers.get("content-type") ?? "", bytes);
+  return new TextDecoder(charset).decode(bytes);
 }
 
 export interface FetchedPage {
@@ -132,7 +175,7 @@ export async function fetchJobPage(
     let res: Response;
     try {
       res = await fetchImpl(url, {
-        headers: BROWSER_HEADERS,
+        headers: browserHeaders(url),
         redirect: "manual",
         signal,
       });

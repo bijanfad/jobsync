@@ -23,6 +23,15 @@ import {
 } from "@/lib/jobs/import/extractPageContent";
 import { jobSourceLabelFromUrl } from "@/lib/jobs/import/jobSourceFromUrl";
 import {
+  chooseDescription,
+  descriptionTooShortForMatch,
+} from "@/lib/jobs/import/chooseDescription";
+import {
+  cleanJobTitle,
+  jobTypeCode,
+  workplaceTypeCode,
+} from "@/lib/jobs/import/jobImportTerms";
+import {
   resolveCompany,
   resolveJobSource,
   resolveJobTitle,
@@ -32,7 +41,7 @@ import {
 import { startAiCall } from "@/lib/aiUsage/tracker";
 import { log } from "@/lib/telemetry";
 import { JobImportSchema, type JobImport } from "@/models/jobImport.schema";
-import { JOB_TYPES, WORKPLACE_TYPES, type Tag } from "@/models/job.model";
+import type { Tag } from "@/models/job.model";
 import type { ActionResult } from "@/models/action.model";
 import { requireUser } from "../shared";
 
@@ -58,16 +67,8 @@ export interface JobUrlImport {
   description?: string; // HTML
   /** Form fields that were filled, for the toast. */
   filled: string[];
-}
-
-function codeFor(
-  enumObj: Record<string, string>,
-  label: string,
-): string | undefined {
-  if (!label) return undefined;
-  return Object.entries(enumObj).find(
-    ([, v]) => v.toLowerCase() === label.toLowerCase(),
-  )?.[0];
+  /** Too short for Job Match: the user should paste the posting. */
+  descriptionTooShort: boolean;
 }
 
 async function asOption(
@@ -92,7 +93,7 @@ async function asOption(
 async function readPosting(
   userId: string,
   url: string,
-): Promise<ActionResult<JobImport>> {
+): Promise<ActionResult<{ job: JobImport; pageDescription: string | null }>> {
   let page;
   try {
     page = await fetchJobPage(url);
@@ -154,14 +155,24 @@ async function readPosting(
       usage: result.usage,
       finishReason: result.finishReason,
     });
-    return { success: true, data: JobImportSchema.parse(result.output) };
+    return {
+      success: true,
+      data: {
+        job: JobImportSchema.parse(result.output),
+        pageDescription: content.description,
+      },
+    };
   } catch (error) {
     void tracker.finish({ error });
     log.error("Job import AI error", { provider, error: String(error) });
+    const timedOut =
+      error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError");
     return {
       success: false,
-      message:
-        "The AI couldn't read this posting. Check your AI Settings, or try again in a moment.",
+      message: timedOut
+        ? "The AI took too long to read this posting. Try again, or pick a faster model in AI Settings."
+        : "The AI couldn't read this posting. Check your AI Settings, or try again in a moment.",
     };
   }
 }
@@ -186,8 +197,9 @@ export async function importJobFromUrl(
 
     const read = await readPosting(user.id, url);
     if (!read.success) return read;
-    const job = read.data!;
-    if (!job.isJobPosting) {
+    const { job, pageDescription } = read.data!;
+    const title = cleanJobTitle(job.jobTitle);
+    if (!job.isJobPosting || !title) {
       return {
         success: false,
         message:
@@ -196,18 +208,17 @@ export async function importJobFromUrl(
     }
 
     const filled: string[] = [];
-    const data: JobUrlImport = { tags: [], filled };
-    const title = job.jobTitle.trim();
+    const data: JobUrlImport = { tags: [], filled, descriptionTooShort: true };
     const company = job.company.trim();
     const location = job.location.trim();
 
     const [titleRes, companyRes, locationRes, sourceRes] = await Promise.all([
-      title ? resolveJobTitle(title, user.id) : undefined,
+      resolveJobTitle(title, user.id),
       company ? resolveCompany(company, user.id) : undefined,
       location ? resolveLocation(location, user.id) : undefined,
       resolveJobSource(jobSourceLabelFromUrl(url), user.id),
     ]);
-    if (titleRes) {
+    {
       data.title = await asOption("jobTitle", titleRes.id, user.id);
       filled.push("title");
     }
@@ -226,9 +237,9 @@ export async function importJobFromUrl(
       data.salaryRange = job.salaryRange.trim().slice(0, 100);
       filled.push("salary");
     }
-    data.workplaceType = codeFor(WORKPLACE_TYPES, job.workplaceType);
+    data.workplaceType = workplaceTypeCode(job.workplaceType);
     if (data.workplaceType) filled.push("workplace type");
-    data.jobType = codeFor(JOB_TYPES, job.jobType);
+    data.jobType = jobTypeCode(job.jobType);
     if (data.jobType) filled.push("job type");
 
     const skills = [...new Set(job.skills.map((s) => s.trim()).filter(Boolean))]
@@ -242,10 +253,12 @@ export async function importJobFromUrl(
     );
     if (data.tags.length) filled.push("skills");
 
-    if (job.description.trim()) {
-      data.description = md.render(job.description.trim());
+    const description = chooseDescription(job.description, pageDescription);
+    if (description) {
+      data.description = md.render(description);
       filled.push("description");
     }
+    data.descriptionTooShort = descriptionTooShortForMatch(description);
 
     return { success: true, data };
   } catch (error) {
