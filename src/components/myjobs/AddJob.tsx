@@ -7,8 +7,8 @@ import {
   DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { addJob, updateJob } from "@/actions/job.actions";
-import { Link, PlusCircle } from "lucide-react";
+import { addJob, importJobFromUrl, updateJob } from "@/actions/job.actions";
+import { Link, Loader2, PlusCircle, Sparkles } from "lucide-react";
 import { Button } from "../ui/button";
 import { useForm, useWatch } from "react-hook-form";
 import { useEffect, useState, useTransition } from "react";
@@ -27,7 +27,7 @@ import {
 } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
-import { toastActionResult, toastError } from "@/lib/toast";
+import { toastActionResult, toastError, toastSuccess } from "@/lib/toast";
 import {
   Form,
   FormControl,
@@ -43,6 +43,7 @@ import TiptapEditor from "../TiptapEditor";
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "../ui/input-group";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
@@ -106,6 +107,10 @@ export function AddJob({
   const [coverLetters, setCoverLetters] = useState<CoverLetter[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>(tags);
   const [isPending, startTransition] = useTransition();
+  const [isImporting, startImport] = useTransition();
+  // The editor only reads its value on mount, so a filled-in description
+  // remounts it.
+  const [descriptionKey, setDescriptionKey] = useState(0);
 
   useEffect(() => {
     if (!dialogOpen && searchParams.get("add-job") === "true") {
@@ -285,6 +290,78 @@ export function AddJob({
 
   const closeDialog = () => setDialogOpen(false);
 
+  // Options are mutated in place, as Combobox does when it creates one, so a
+  // newly created title/company/location shows up as selected.
+  const addOption = (list: { id: string }[], option?: { id: string }) => {
+    if (option && !list.some((o) => o.id === option.id)) list.unshift(option as any);
+  };
+
+  const fillFromUrl = () => {
+    const url = (form.getValues("jobUrl") ?? "").trim();
+    if (!/^https?:\/\/\S+$/i.test(url)) {
+      toastError("Paste the link to the job posting first.");
+      return;
+    }
+    startImport(async () => {
+      const result = await importJobFromUrl(url);
+      if (!result.success) {
+        toastError(result.message, "Couldn't fill from this link");
+        return;
+      }
+      const job = result.data!;
+      const opts = { shouldDirty: true, shouldValidate: true };
+      if (job.title) {
+        addOption(jobTitles, job.title);
+        setValue("title", job.title.id, opts);
+      }
+      if (job.company) {
+        addOption(companies, job.company);
+        setValue("company", job.company.id, opts);
+      }
+      if (job.location) {
+        addOption(locations, job.location);
+        setValue("location", job.location.id, opts);
+      }
+      if (job.source) {
+        addOption(jobSources, job.source);
+        setValue("source", job.source.id, opts);
+      }
+      if (job.salaryRange) setValue("salaryRange", job.salaryRange, opts);
+      if (job.workplaceType) setValue("workplaceType", job.workplaceType, opts);
+      if (job.jobType) setValue("type", job.jobType, opts);
+      if (job.tags.length) {
+        const known = new Set(availableTags.map((t) => t.id));
+        const incoming = job.tags.filter((t) => !known.has(t.id));
+        if (incoming.length) setAvailableTags((prev) => [...prev, ...incoming]);
+        const current = form.getValues("tags") ?? [];
+        setValue(
+          "tags",
+          [...new Set([...current, ...job.tags.map((t) => t.id)])].slice(
+            0,
+            APP_CONSTANTS.MAX_JOB_TAGS,
+          ),
+          opts,
+        );
+      }
+      if (job.description) {
+        setValue("jobDescription", job.description, opts);
+        setDescriptionKey((k) => k + 1);
+      }
+      const missingAfter = missingRequiredFields({
+        title: form.getValues("title"),
+        company: form.getValues("company"),
+        location: form.getValues("location"),
+        source: form.getValues("source"),
+      });
+      toastSuccess(
+        missingAfter.length
+          ? "Check the details, and fill in what the posting didn't say."
+          : "Check the details before saving.",
+        "Filled from the job posting",
+      );
+    });
+  };
+
   const [title, company, location, source, dueDate, dateApplied] = useWatch({
     control: form.control,
     name: ["title", "company", "location", "source", "dueDate", "dateApplied"],
@@ -366,7 +443,7 @@ export function AddJob({
                           <div className="flex items-baseline gap-1">
                             <FormLabel>Job URL</FormLabel>
                             <span className="text-xs leading-none text-muted-foreground">
-                              · optional, keeps the posting one click away
+                              · optional · paste a posting link and press Fill with AI
                             </span>
                           </div>
                           <InputGroup>
@@ -379,6 +456,23 @@ export function AddJob({
                                 {...field}
                               />
                             </FormControl>
+                            <InputGroupAddon align="inline-end">
+                              <InputGroupButton
+                                variant="secondary"
+                                size="xs"
+                                onClick={fillFromUrl}
+                                disabled={isImporting || !field.value?.trim()}
+                                data-testid="fill-job-from-url"
+                                title="Read the posting at this link and fill in the form with AI"
+                              >
+                                {isImporting ? (
+                                  <Loader2 className="animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <Sparkles aria-hidden="true" />
+                                )}
+                                {isImporting ? "Reading posting…" : "Fill with AI"}
+                              </InputGroupButton>
+                            </InputGroupAddon>
                           </InputGroup>
                           <FormMessage />
                         </FormItem>
@@ -715,7 +809,7 @@ export function AddJob({
                           </span>
                         </div>
                         <FormControl>
-                          <TiptapEditor field={field} />
+                          <TiptapEditor key={descriptionKey} field={field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
