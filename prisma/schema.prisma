@@ -472,6 +472,13 @@ model Job {
   matchScore      Int?
   matchData       String?
   discoveryStatus String?
+
+  // "Compare all my CVs": best CV's score/title (shown beside the job title)
+  // and the ranked comparison as JSON (ResumeComparisonResult)
+  bestResumeScore  Int?
+  bestResumeTitle  String?
+  resumeComparison String?
+  resumeComparedAt DateTime?
   discoveredAt    DateTime?
 
   // MCP provenance: which agent/token created this job (null = UI or automation)

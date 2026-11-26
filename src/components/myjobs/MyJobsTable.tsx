@@ -1,4 +1,5 @@
 "use client";
+import { BestCvBadge } from "./BestCvBadge";
 import {
   Table,
   TableBody,
@@ -139,6 +140,11 @@ function MyJobsTable({
                     >
                       {job.JobTitle?.label}
                     </Link>
+                    <BestCvBadge
+                      score={job.bestResumeScore}
+                      title={job.bestResumeTitle}
+                      comparedAt={job.resumeComparedAt}
+                    />
                     {(job._count?.Notes ?? 0) > 0 && (
                       <Badge
                         variant="secondary"

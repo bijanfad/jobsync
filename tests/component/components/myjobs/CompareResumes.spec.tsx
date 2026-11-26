@@ -7,6 +7,8 @@ import { toastError } from "@/lib/toast";
 
 vi.mock("@/actions/job.actions", () => ({ compareResumesForJob: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toastError: vi.fn() }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const data = {
   results: [
@@ -57,6 +59,20 @@ describe("CompareResumes", () => {
       within(rows[1]).getByRole("button", { name: /full match with this cv/i }),
     );
     expect(onFullMatch).toHaveBeenCalledWith("Developer CV");
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows the comparison saved on the job before comparing again", () => {
+    render(
+      <CompareResumes
+        jobId="job-1"
+        onFullMatch={vi.fn()}
+        initial={{ ...data, comparedAt: "2026-11-26T09:00:00.000Z" }}
+      />,
+    );
+    expect(screen.getAllByTestId("compare-resumes-row")).toHaveLength(2);
+    expect(screen.getByText(/Last compared/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compare again/i })).toBeInTheDocument();
   });
 
   it("shows the error and no results when comparing fails", async () => {

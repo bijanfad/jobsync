@@ -21,7 +21,7 @@ vi.mock("@/lib/ai/tools/preprocessing-job", () => ({ preprocessJob: vi.fn() }));
 vi.mock("@/lib/ai/tools/preprocessing", () => ({ preprocessResume: vi.fn() }));
 vi.mock("@/lib/db", () => ({
   default: {
-    job: { findFirst: vi.fn() },
+    job: { findFirst: vi.fn(), updateMany: vi.fn() },
     resume: { findMany: vi.fn() },
     user: { findUnique: vi.fn() },
   },
@@ -82,6 +82,23 @@ describe("compareResumesForJob", () => {
     expect(results[1]).toMatchObject({ isDefault: false, isJobResume: true });
     expect(results[0].strengths).toHaveLength(3);
     expect(skipped).toEqual(["Empty draft"]);
+  });
+
+  it("saves the best CV and the ranking on the caller's own job", async () => {
+    const result = await compareResumesForJob("job-1");
+    const update = db.job.updateMany.mock.calls[0][0];
+    expect(update.where).toEqual({ id: "job-1", userId: "user-1" });
+    expect(update.data).toMatchObject({ bestResumeScore: 82, bestResumeTitle: "Security CV" });
+    expect(update.data.resumeComparedAt).toBeInstanceOf(Date);
+    const saved = JSON.parse(update.data.resumeComparison);
+    expect(saved.results.map((r: any) => r.title)).toEqual(["Security CV", "Developer CV"]);
+    expect(saved.comparedAt).toBe((result as any).data.comparedAt);
+  });
+
+  it("saves nothing when the comparison fails", async () => {
+    (generateText as any).mockRejectedValue(new Error("overloaded"));
+    await compareResumesForJob("job-1");
+    expect(db.job.updateMany).not.toHaveBeenCalled();
   });
 
   it("only reads the caller's own job and resumes", async () => {

@@ -1,4 +1,5 @@
 "use client";
+import { BestCvBadge } from "../BestCvBadge";
 
 import {
   ArrowLeft,
@@ -72,7 +73,14 @@ export function JobDetailsHeader({
           className="h-8 w-8 min-w-8"
         />
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold">{job.JobTitle?.label}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold">{job.JobTitle?.label}</h1>
+            <BestCvBadge
+              score={job.bestResumeScore}
+              title={job.bestResumeTitle}
+              comparedAt={job.resumeComparedAt}
+            />
+          </div>
           <p className="text-sm text-muted-foreground">
             {job.Company?.label && (
               <Link

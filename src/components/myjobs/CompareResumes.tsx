@@ -10,13 +10,11 @@ import { Card } from "../ui/card";
 import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-// Same bands as the Job Match prompt's scoring guidelines.
-export function scoreBand(score: number): { label: string; className: string } {
-  if (score >= 80) return { label: "Strong", className: "bg-emerald-600 text-white" };
-  if (score >= 65) return { label: "Good", className: "bg-teal-600 text-white" };
-  if (score >= 50) return { label: "Partial", className: "bg-amber-500 text-white" };
-  return { label: "Weak", className: "bg-rose-600 text-white" };
-}
+import { scoreBand } from "./scoreBand";
+import { format } from "date-fns";
+import { useRouter } from "next/navigation";
+
+export { scoreBand };
 
 interface CompareResumesProps {
   jobId: string;
@@ -25,6 +23,8 @@ interface CompareResumesProps {
   fullMatchDisabled?: boolean;
   /** Why comparing can't run yet, e.g. no job description. */
   blockedReason?: string;
+  /** The comparison saved on the job, shown until the user compares again. */
+  initial?: ResumeComparisonResult | null;
 }
 
 export function CompareResumes({
@@ -32,8 +32,10 @@ export function CompareResumes({
   onFullMatch,
   fullMatchDisabled,
   blockedReason,
+  initial,
 }: CompareResumesProps) {
-  const [result, setResult] = useState<ResumeComparisonResult | null>(null);
+  const router = useRouter();
+  const [result, setResult] = useState<ResumeComparisonResult | null>(initial ?? null);
   const [isPending, startTransition] = useTransition();
 
   const compare = () =>
@@ -44,6 +46,8 @@ export function CompareResumes({
         return;
       }
       setResult(res.data!);
+      // The best score now shows beside the job title; refresh the header.
+      router.refresh();
     });
 
   return (
@@ -53,8 +57,13 @@ export function CompareResumes({
           <h3 className="font-semibold">Which CV fits best?</h3>
           <p className="text-sm text-muted-foreground">
             Scores every CV you have against this job, so you know which one to
-            send. Nothing is saved.
+            send. The best score shows beside the job title.
           </p>
+          {result?.comparedAt && (
+            <p className="text-xs text-muted-foreground">
+              Last compared {format(new Date(result.comparedAt), "PPp")}
+            </p>
+          )}
         </div>
         <Button
           variant="outline"

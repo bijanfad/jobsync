@@ -30,4 +30,18 @@ export interface ResumeComparisonResult {
   results: ResumeComparison[];
   /** Resumes left out because they are empty or too short to judge. */
   skipped: string[];
+  comparedAt?: string; // ISO
+}
+
+/** The saved comparison on a job, or null when absent or unreadable. */
+export function parseResumeComparison(
+  raw: string | null | undefined,
+): ResumeComparisonResult | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.results) ? (parsed as ResumeComparisonResult) : null;
+  } catch {
+    return null;
+  }
 }
