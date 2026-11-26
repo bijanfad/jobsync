@@ -9,6 +9,7 @@ import {
   Zap,
   BookOpen,
   CalendarCheck,
+  ListOrdered,
 } from "lucide-react";
 
 export const APP_CONSTANTS = {
@@ -399,6 +400,11 @@ export const SIDEBAR_LINKS = [
     icon: BriefcaseBusiness,
     route: "/dashboard/myjobs",
     label: "Jobs",
+  },
+  {
+    icon: ListOrdered,
+    route: "/dashboard/rank-jobs",
+    label: "Rank jobs",
   },
   {
     icon: CalendarCheck,

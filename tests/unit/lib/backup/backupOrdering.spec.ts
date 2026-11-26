@@ -17,6 +17,8 @@ const NOT_BACKED_UP = [
   "ChatConversation", // wiped on import, never exported
   "Notification",     // deliberately not in the data backup
   "AiCall",           // deliberately not in the data backup
+  "JobRanking",       // working data: re-upload the CSV to rank again
+  "JobRankingRow",    // goes with its JobRanking
 ];
 
 describe("backup ordering", () => {
