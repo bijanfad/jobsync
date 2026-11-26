@@ -13,9 +13,17 @@ import { deleteRanking } from "@/actions/ranking.actions";
 import type { RankingSummary } from "@/models/jobRanking.model";
 import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { RankingUpload } from "./RankingUpload";
+import { FindJobs } from "./FindJobs";
+import type { JobSearchView } from "@/models/jobSearch.model";
 import { RankingProgress, rankingStatusLabel } from "./RankingProgress";
 
-export function RankJobsContainer({ rankings }: { rankings: RankingSummary[] }) {
+export function RankJobsContainer({
+  rankings,
+  searches,
+}: {
+  rankings: RankingSummary[];
+  searches: { searches: JobSearchView[]; hasAdzunaKey: boolean };
+}) {
   const router = useRouter();
   const [pending, setPending] = useState<RankingSummary | null>(null);
 
@@ -32,13 +40,14 @@ export function RankJobsContainer({ rankings }: { rankings: RankingSummary[] }) 
   return (
     <Card>
       <ResponsiveCardHeader>
-        <CardTitle>Rank jobs</CardTitle>
+        <CardTitle>Find &amp; rank jobs</CardTitle>
       </ResponsiveCardHeader>
       <CardContent className="space-y-6">
+        <FindJobs initial={searches} />
         <RankingUpload />
         {rankings.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium">Your rankings</h3>
+            <h3 className="text-sm font-medium">Results and rankings</h3>
             <ul className="divide-y rounded-lg border">
               {rankings.map((r) => (
                 <li key={r.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">

@@ -342,7 +342,7 @@ export function RankingDetail({ rankingId, initial }: { rankingId: string; initi
                         )}
                       </div>
                       <p className="truncate text-xs text-muted-foreground">
-                        {[row.company, row.location, row.category, row.datePosted]
+                        {[row.company, row.location, row.category, row.datePosted, row.source]
                           .filter(Boolean)
                           .join(" · ")}
                       </p>

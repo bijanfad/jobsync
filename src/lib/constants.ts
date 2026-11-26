@@ -281,6 +281,7 @@ export const SCHEDULER_CONSTANTS = {
   ENABLED: true,
   CRON_EXPRESSION: "0 * * * *", // Every hour at minute 0
   PRUNE_CRON_EXPRESSION: "0 3 * * *", // Daily at 03:00; reads filter anyway
+  JOB_SEARCH_CRON_EXPRESSION: "30 * * * *", // Hourly at :30; each Find jobs search runs once a day
   STALE_RUN_TIMEOUT_MS: 15 * 60 * 1000, // 15 min; reaper cutoff for stuck runs
 } as const;
 
@@ -404,7 +405,7 @@ export const SIDEBAR_LINKS = [
   {
     icon: ListOrdered,
     route: "/dashboard/rank-jobs",
-    label: "Rank jobs",
+    label: "Find jobs",
   },
   {
     icon: CalendarCheck,

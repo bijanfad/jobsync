@@ -76,7 +76,7 @@ function cleanUrl(raw: string | undefined): string | undefined {
 }
 
 /** Same posting under a different tracking query or host case. */
-function urlKey(url: string): string {
+export function urlKey(url: string): string {
   const u = new URL(url);
   for (const k of [...u.searchParams.keys()]) {
     if (/^(utm_|gclid|fbclid|ref$|source$|cp$|p$|tc$|jw_chl_seg$)/i.test(k)) {

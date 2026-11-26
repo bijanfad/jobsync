@@ -244,6 +244,7 @@ const rowViewSelect = {
   scoreError: true,
   scoredAt: true,
   jobId: true,
+  source: true,
 } as const;
 
 export interface RankingPage {
