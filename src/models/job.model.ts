@@ -59,6 +59,10 @@ export interface JobResponse {
   CoverLetter?: CoverLetter;
   matchScore?: number | null;
   matchData?: string | null;
+  bestResumeScore?: number | null;
+  bestResumeTitle?: string | null;
+  resumeComparison?: string | null;
+  resumeComparedAt?: Date | null;
   tags?: Tag[];
   contactLinks?: JobContactLink[];
   stages?: JobStage[];

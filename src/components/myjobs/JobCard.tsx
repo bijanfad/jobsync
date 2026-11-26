@@ -1,4 +1,5 @@
 "use client";
+import { BestCvBadge } from "./BestCvBadge";
 import {
   Calendar,
   DollarSign,
@@ -58,6 +59,11 @@ export function JobCard({
             >
               {job.JobTitle?.label}
             </Link>
+            <BestCvBadge
+              score={job.bestResumeScore}
+              title={job.bestResumeTitle}
+              comparedAt={job.resumeComparedAt}
+            />
             {notesCount > 0 && (
               <Badge
                 variant="secondary"

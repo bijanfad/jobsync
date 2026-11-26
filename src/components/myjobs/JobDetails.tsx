@@ -28,6 +28,7 @@ import {
 } from "../ui/alert-dialog";
 import { NotesSection } from "./NotesSection";
 import { CompareResumes } from "./CompareResumes";
+import { parseResumeComparison } from "@/models/resumeCompare.schema";
 import { useState, useMemo } from "react";
 import { MatchDetails } from "../automations/MatchDetails";
 import type { JobMatchData } from "@/models/ai.schemas";
@@ -295,6 +296,7 @@ function JobDetails({
             <div className="mt-4">
               <CompareResumes
                 jobId={job.id}
+                initial={parseResumeComparison(job.resumeComparison)}
                 onFullMatch={onMatchWithResume}
                 fullMatchDisabled={chatBusy}
                 blockedReason={

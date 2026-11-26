@@ -34,6 +34,9 @@ const JOB_LIST_SELECT = {
   matchScore: true,
   matchData: true,
   discoveryStatus: true,
+  bestResumeScore: true,
+  bestResumeTitle: true,
+  resumeComparedAt: true,
   _count: { select: { Notes: true } },
 };
 

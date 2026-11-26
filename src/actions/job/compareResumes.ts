@@ -35,8 +35,9 @@ const clampScore = (n: number) =>
 
 /**
  * Scores every one of the user's resumes against one job in a single AI call,
- * so the user can see which CV to send. Nothing is saved: the full Job Match
- * (one resume, saved to the job) stays the place for the detailed analysis.
+ * so the user can see which CV to send. The ranking is saved on the job
+ * (best score and CV title for the badge beside the job title); the full Job
+ * Match (one resume) stays the place for the detailed analysis.
  */
 export async function compareResumesForJob(
   jobId: string,
@@ -195,7 +196,24 @@ export async function compareResumesForJob(
       };
     }
     results.sort((a, b) => b.score - a.score);
-    return { success: true, data: { results, skipped } };
+    const comparedAt = new Date();
+    const data: ResumeComparisonResult = {
+      results,
+      skipped,
+      comparedAt: comparedAt.toISOString(),
+    };
+    // Saved so the best score shows beside the job title everywhere and the
+    // AI Match tab still has the ranking after a reload.
+    await prisma.job.updateMany({
+      where: { id: job.id, userId: user.id },
+      data: {
+        bestResumeScore: results[0].score,
+        bestResumeTitle: results[0].title,
+        resumeComparison: JSON.stringify(data),
+        resumeComparedAt: comparedAt,
+      },
+    });
+    return { success: true, data };
   } catch (error) {
     log.error("Resume compare failed", { error: String(error) });
     return {
