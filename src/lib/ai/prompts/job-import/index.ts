@@ -1,4 +1,4 @@
-export const JOB_IMPORT_SYSTEM_PROMPT = `You read a job posting web page and extract the fields of a job application form.
+export const JOB_IMPORT_SYSTEM_PROMPT = `You read a job posting (a web page, or text the user copied from one) and extract the fields of a job application form.
 
 The posting can be in any language, often German. Read it in its own language. Answer workplaceType and jobType with the English values below even for a German posting, and keep every other field in the posting's language.
 
@@ -20,7 +20,7 @@ Return these fields, using exactly these key names:
 Use structured data (JSON-LD) when it is present, and the page text for anything it lacks. Never invent a value: an empty field is better than a guess.`;
 
 export function buildJobImportPrompt(input: {
-  url: string;
+  url?: string;
   title?: string;
   siteName?: string;
   jsonLd: string | null;
@@ -29,7 +29,7 @@ export function buildJobImportPrompt(input: {
 }): string {
   const { url, title, siteName, jsonLd, text, nonce } = input;
   const strip = (s: string) => s.split(nonce).join("");
-  const parts = [`Page URL: ${url}`];
+  const parts = [url ? `Page URL: ${url}` : "Source: text the user copied from a job posting"];
   if (title) parts.push(`Page title: ${strip(title)}`);
   if (siteName) parts.push(`Site name: ${strip(siteName)}`);
   if (jsonLd) {

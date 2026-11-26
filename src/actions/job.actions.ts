@@ -11,7 +11,7 @@ export {
 
 export { addJob, updateJob, deleteJobById } from "./job/mutations";
 
-export { importJobFromUrl } from "./job/importFromUrl";
+export { importJobFromUrl, importJobFromText } from "./job/importFromUrl";
 export type { JobUrlImport } from "./job/importFromUrl";
 
 export { updateJobStatus, saveJobMatchResult } from "./job/status";

@@ -15,10 +15,13 @@ const plainLength = (s: string) =>
 export function chooseDescription(
   modelMarkdown: string,
   pageText: string | null,
+  // Pasted text carries the site's menus and footer too, so the model's
+  // cleaned copy is kept down to half its length.
+  minRatio = 0.8,
 ): string {
   const fromModel = modelMarkdown.trim();
   if (!pageText) return fromModel;
-  return plainLength(fromModel) >= plainLength(pageText) * 0.8
+  return plainLength(fromModel) >= plainLength(pageText) * minRatio
     ? fromModel
     : pageText;
 }
