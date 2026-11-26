@@ -7,8 +7,15 @@ import {
   DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { addJob, importJobFromUrl, updateJob } from "@/actions/job.actions";
-import { Link, Loader2, PlusCircle, Sparkles } from "lucide-react";
+import {
+  addJob,
+  importJobFromText,
+  importJobFromUrl,
+  updateJob,
+} from "@/actions/job.actions";
+import type { JobUrlImport } from "@/actions/job.actions";
+import { ClipboardPaste, Link, Loader2, PlusCircle, Sparkles } from "lucide-react";
+import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { useForm, useWatch } from "react-hook-form";
 import { useEffect, useState, useTransition } from "react";
@@ -111,6 +118,9 @@ export function AddJob({
   // The editor only reads its value on mount, so a filled-in description
   // remounts it.
   const [descriptionKey, setDescriptionKey] = useState(0);
+  // "Paste posting text": for sites whose link can't be read automatically.
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pastedText, setPastedText] = useState("");
 
   useEffect(() => {
     if (!dialogOpen && searchParams.get("add-job") === "true") {
@@ -252,6 +262,8 @@ export function AddJob({
   const addJobForm = () => {
     reset(newJobDefaultValues);
     setAutoFilledDate(null);
+    setPasteOpen(false);
+    setPastedText("");
     resetEditJob();
     setDialogOpen(true);
   };
@@ -306,67 +318,97 @@ export function AddJob({
       const result = await importJobFromUrl(url);
       if (!result.success) {
         toastError(result.message, "Couldn't fill from this link");
+        setPasteOpen(true);
         return;
       }
-      const job = result.data!;
-      const opts = { shouldDirty: true, shouldValidate: true };
-      if (job.title) {
-        addOption(jobTitles, job.title);
-        setValue("title", job.title.id, opts);
-      }
-      if (job.company) {
-        addOption(companies, job.company);
-        setValue("company", job.company.id, opts);
-      }
-      if (job.location) {
-        addOption(locations, job.location);
-        setValue("location", job.location.id, opts);
-      }
-      if (job.source) {
-        addOption(jobSources, job.source);
-        setValue("source", job.source.id, opts);
-      }
-      if (job.salaryRange) setValue("salaryRange", job.salaryRange, opts);
-      if (job.workplaceType) setValue("workplaceType", job.workplaceType, opts);
-      if (job.jobType) setValue("type", job.jobType, opts);
-      if (job.tags.length) {
-        const known = new Set(availableTags.map((t) => t.id));
-        const incoming = job.tags.filter((t) => !known.has(t.id));
-        if (incoming.length) setAvailableTags((prev) => [...prev, ...incoming]);
-        const current = form.getValues("tags") ?? [];
-        setValue(
-          "tags",
-          [...new Set([...current, ...job.tags.map((t) => t.id)])].slice(
-            0,
-            APP_CONSTANTS.MAX_JOB_TAGS,
-          ),
-          opts,
-        );
-      }
-      if (job.description) {
-        setValue("jobDescription", job.description, opts);
-        setDescriptionKey((k) => k + 1);
-      }
-      const missingAfter = missingRequiredFields({
-        title: form.getValues("title"),
-        company: form.getValues("company"),
-        location: form.getValues("location"),
-        source: form.getValues("source"),
-      });
-      if (job.descriptionTooShort) {
-        toastError(
-          "The posting's full text couldn't be read from this page, so Job Match won't work yet. Copy the job description from the site into Job Description before saving.",
-          "Filled, but the description is missing",
-        );
-        return;
-      }
-      toastSuccess(
-        missingAfter.length
-          ? "Check the details, and fill in what the posting didn't say."
-          : "Check the details before saving.",
-        "Filled from the job posting",
-      );
+      applyImport(result.data!, "link");
     });
+  };
+
+  const fillFromText = () => {
+    const text = pastedText.trim();
+    if (!text) {
+      toastError("Paste the job posting's text first.");
+      return;
+    }
+    startImport(async () => {
+      const result = await importJobFromText(
+        text,
+        (form.getValues("jobUrl") ?? "").trim() || undefined,
+      );
+      if (!result.success) {
+        toastError(result.message, "Couldn't fill from this text");
+        return;
+      }
+      applyImport(result.data!, "text");
+      if (!result.data!.descriptionTooShort) {
+        setPastedText("");
+        setPasteOpen(false);
+      }
+    });
+  };
+
+  const applyImport = (job: JobUrlImport, from: "link" | "text") => {
+    const opts = { shouldDirty: true, shouldValidate: true };
+    if (job.title) {
+      addOption(jobTitles, job.title);
+      setValue("title", job.title.id, opts);
+    }
+    if (job.company) {
+      addOption(companies, job.company);
+      setValue("company", job.company.id, opts);
+    }
+    if (job.location) {
+      addOption(locations, job.location);
+      setValue("location", job.location.id, opts);
+    }
+    if (job.source) {
+      addOption(jobSources, job.source);
+      setValue("source", job.source.id, opts);
+    }
+    if (job.salaryRange) setValue("salaryRange", job.salaryRange, opts);
+    if (job.workplaceType) setValue("workplaceType", job.workplaceType, opts);
+    if (job.jobType) setValue("type", job.jobType, opts);
+    if (job.tags.length) {
+      const known = new Set(availableTags.map((t) => t.id));
+      const incoming = job.tags.filter((t) => !known.has(t.id));
+      if (incoming.length) setAvailableTags((prev) => [...prev, ...incoming]);
+      const current = form.getValues("tags") ?? [];
+      setValue(
+        "tags",
+        [...new Set([...current, ...job.tags.map((t) => t.id)])].slice(
+          0,
+          APP_CONSTANTS.MAX_JOB_TAGS,
+        ),
+        opts,
+      );
+    }
+    if (job.description) {
+      setValue("jobDescription", job.description, opts);
+      setDescriptionKey((k) => k + 1);
+    }
+    const missingAfter = missingRequiredFields({
+      title: form.getValues("title"),
+      company: form.getValues("company"),
+      location: form.getValues("location"),
+      source: form.getValues("source"),
+    });
+    if (job.descriptionTooShort) {
+      toastError(
+        from === "link"
+          ? "This site doesn't show the job text to automatic readers, so Job Match won't work yet. Copy the whole posting from the site and press Fill from text below."
+          : "The pasted text has too little description for Job Match. Copy the whole posting, including its tasks and requirements.",
+        "Filled, but the description is missing",
+      );
+      setPasteOpen(true);
+      return;
+    }
+    toastSuccess(
+      missingAfter.length
+        ? "Check the details, and fill in what the posting didn't say."
+        : "Check the details before saving.",
+      "Filled from the job posting",
+    );
   };
 
   const [title, company, location, source, dueDate, dateApplied] = useWatch({
@@ -482,6 +524,68 @@ export function AddJob({
                             </InputGroupAddon>
                           </InputGroup>
                           <FormMessage />
+                          {!pasteOpen ? (
+                            <button
+                              type="button"
+                              className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                              onClick={() => setPasteOpen(true)}
+                              data-testid="open-paste-posting"
+                            >
+                              Link doesn&apos;t work? Paste the posting text instead
+                            </button>
+                          ) : (
+                            <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
+                              <label
+                                htmlFor="paste-posting-text"
+                                className="text-xs text-muted-foreground"
+                              >
+                                Open the posting, select all its text (Cmd+A or
+                                Ctrl+A), copy it and paste it here. AI fills in
+                                every field from it.
+                              </label>
+                              <Textarea
+                                id="paste-posting-text"
+                                data-testid="paste-posting-text"
+                                className="max-h-48 min-h-24 text-sm"
+                                placeholder="Paste the whole job posting here"
+                                value={pastedText}
+                                onChange={(e) => setPastedText(e.target.value)}
+                                // Cmd+Enter here fills; it must not save the job
+                                onKeyDownCapture={(e) => {
+                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!isImporting) fillFromText();
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={fillFromText}
+                                  disabled={isImporting || !pastedText.trim()}
+                                  data-testid="fill-job-from-text"
+                                >
+                                  {isImporting ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                                  ) : (
+                                    <ClipboardPaste className="h-3.5 w-3.5" aria-hidden="true" />
+                                  )}
+                                  {isImporting ? "Reading posting…" : "Fill from text"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setPasteOpen(false)}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </FormItem>
                       )}
                     />

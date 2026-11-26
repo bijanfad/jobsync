@@ -45,11 +45,11 @@ vi.mock("@/lib/db", () => {
 });
 
 import { generateText } from "ai";
-import { importJobFromUrl } from "@/actions/job/importFromUrl";
+import { importJobFromText, importJobFromUrl } from "@/actions/job/importFromUrl";
 import { fetchJobPage, JobPageFetchError } from "@/lib/jobs/import/fetchJobPage";
 import { getModel } from "@/lib/ai/providers";
 import { MissingCredentialError } from "@/lib/ai/tools/errors";
-import { resolveCompany, resolveJobTitle } from "@/lib/jobs/resolve";
+import { resolveCompany, resolveJobSource, resolveJobTitle } from "@/lib/jobs/resolve";
 
 const PAGE = `<html><body>${"<p>Build data pipelines with Python and SAP.</p>".repeat(20)}</body></html>`;
 
@@ -191,5 +191,78 @@ describe("importJobFromUrl", () => {
     (generateText as any).mockRejectedValue(new Error("overloaded"));
     const result = await importJobFromUrl("https://jobs.example.com/1");
     expect((result as any).message).toContain("couldn't read this posting");
+  });
+});
+
+describe("importJobFromText", () => {
+  const PASTED = [
+    "Bechtle – Karriere | Jobs | Login",
+    "IT Consultant Security (w/m/d)",
+    "Neckarsulm · Vollzeit",
+    "Ihre Aufgaben",
+    ...Array.from({ length: 10 }, (_, i) => `• Aufgabe ${i + 1}: Beratung unserer Kunden zu IT-Sicherheit`),
+    "Impressum · Datenschutz",
+  ].join("\n");
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getModel as any).mockResolvedValue({});
+  });
+
+  it("fills the form from pasted text without fetching anything", async () => {
+    const cleaned =
+      "## Ihre Aufgaben\n\n" +
+      Array.from({ length: 10 }, (_, i) => `- Aufgabe ${i + 1}: Beratung unserer Kunden zu IT-Sicherheit`).join("\n");
+    (generateText as any).mockResolvedValue({
+      output: {
+        ...aiOutput,
+        jobTitle: "IT Consultant Security (w/m/d)",
+        company: "Bechtle",
+        jobType: "Vollzeit",
+        description: cleaned,
+      },
+    });
+    const result = await importJobFromText(PASTED);
+    const data = (result as any).data;
+    expect(fetchJobPage).not.toHaveBeenCalled();
+    expect(resolveJobTitle).toHaveBeenCalledWith("IT Consultant Security", "user-1");
+    expect(data.jobType).toBe("FT");
+    // The model's cleaned copy wins over the raw paste with its menus
+    expect(data.description).toContain("<h2>Ihre Aufgaben</h2>");
+    expect(data.description).not.toContain("Impressum");
+    expect(data.descriptionTooShort).toBe(false);
+    // No link: the source is left for the user
+    expect(data.source).toBeUndefined();
+    expect(resolveJobSource).not.toHaveBeenCalled();
+    const prompt = (generateText as any).mock.calls[0][0].prompt as string;
+    expect(prompt).toContain("text the user copied");
+    expect(prompt).toContain("Aufgabe 10");
+  });
+
+  it("falls back to the pasted text when the model cuts the description", async () => {
+    (generateText as any).mockResolvedValue({
+      output: { ...aiOutput, description: "Kurz." },
+    });
+    const result = await importJobFromText(PASTED);
+    expect((result as any).data.description).toContain("Aufgabe 10");
+  });
+
+  it("uses the job link, when there is one, for the source", async () => {
+    (generateText as any).mockResolvedValue({ output: aiOutput });
+    const result = await importJobFromText(PASTED, "https://www.linkedin.com/jobs/view/1");
+    expect(resolveJobSource).toHaveBeenCalledWith("Linkedin", "user-1");
+    expect((result as any).data.source.id).toBe("src-1");
+  });
+
+  it("asks for the whole posting when the paste is too short", async () => {
+    const result = await importJobFromText("IT Consultant");
+    expect((result as any).message).toContain("Paste the whole job posting");
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it("refuses text that isn't a posting", async () => {
+    (generateText as any).mockResolvedValue({ output: { ...aiOutput, isJobPosting: false } });
+    const result = await importJobFromText(PASTED);
+    expect((result as any).message).toContain("doesn't look like a job posting");
   });
 });
