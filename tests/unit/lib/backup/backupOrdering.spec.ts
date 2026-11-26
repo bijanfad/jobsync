@@ -19,6 +19,7 @@ const NOT_BACKED_UP = [
   "AiCall",           // deliberately not in the data backup
   "JobRanking",       // working data: re-upload the CSV to rank again
   "JobRankingRow",    // goes with its JobRanking
+  "JobSearch",        // saved Find jobs searches: quick to set up again
 ];
 
 describe("backup ordering", () => {

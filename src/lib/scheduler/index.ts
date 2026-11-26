@@ -6,9 +6,11 @@ import { ATS_BOARDS, type JobBoard } from "@/models/automation.model";
 import { log } from "@/lib/telemetry";
 import { pruneNotifications } from "@/lib/notifications/prune";
 import { pruneAiCalls } from "@/lib/aiUsage/prune";
+import { runDueJobSearches } from "@/lib/jobs/search/run";
 
 let scheduledTask: ScheduledTask | null = null;
 let pruneTask: ScheduledTask | null = null;
+let searchTask: ScheduledTask | null = null;
 
 // Both prunes log and swallow their own errors.
 async function runPrunes() {
@@ -161,6 +163,12 @@ export function startScheduler() {
     runPrunes,
     { timezone: process.env.TZ || "UTC" },
   );
+  // Find jobs: each daily search runs once a day, checked every hour.
+  searchTask = cron.schedule(
+    SCHEDULER_CONSTANTS.JOB_SEARCH_CRON_EXPRESSION,
+    () => runDueJobSearches(),
+    { timezone: process.env.TZ || "UTC" },
+  );
 
   log.info("[Scheduler] Started successfully");
 }
@@ -171,6 +179,8 @@ export function stopScheduler() {
     scheduledTask = null;
     pruneTask?.stop();
     pruneTask = null;
+    searchTask?.stop();
+    searchTask = null;
     log.info("[Scheduler] Stopped");
   }
 }

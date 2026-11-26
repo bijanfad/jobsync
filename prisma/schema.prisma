@@ -40,6 +40,7 @@ model User {
   Notification   Notification[]
   aiCalls        AiCall[]
   JobRanking     JobRanking[]
+  JobSearch      JobSearch[]
   ChatConversation ChatConversation?
   defaultResumeId String?
   defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
@@ -789,9 +790,36 @@ model JobRankingRow {
   scoreError      String?
   scoredAt        DateTime?
 
-  jobId String? // set once added to My Jobs; plain id, no FK
+  jobId  String? // set once added to My Jobs; plain id, no FK
+  source String? // where a Find jobs search found it ("Bundesagentur", "Personio", ...); null for CSV rows
 
   @@index([rankingId, loadStatus])
   @@index([rankingId, scoredAt])
   @@index([rankingId, score])
+}
+
+// "Find jobs": a saved search over job portals and company career pages.
+// Each run adds the jobs it hasn't seen to the search's own JobRanking,
+// which loads and scores them (src/lib/jobs/search/run.ts).
+model JobSearch {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keywords   String // comma-separated; a job matches any of them
+  location   String?
+  radiusKm   Int       @default(30)
+  maxAgeDays Int       @default(7)
+  sources    String // JSON: SearchSourceId[]
+  companies  String    @default("{}") // JSON: career-page source -> company slugs
+  daily      Boolean   @default(true)
+  rankingId  String? // plain id, no FK: deleting the ranking starts a fresh one
+  status     String    @default("idle") // "idle" | "running"
+  lastRunAt  DateTime?
+  lastRun    String? // JSON: SearchRunSummary
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([daily, lastRunAt])
 }

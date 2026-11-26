@@ -132,7 +132,8 @@ async function loadNext(rankingId: string): Promise<number> {
       data: {
         loadStatus: loaded.status,
         loadError: loaded.error ?? null,
-        description: loaded.description ?? null,
+        // A failed read keeps a description the search source already gave.
+        ...(loaded.description ? { description: loaded.description } : {}),
         finalUrl: loaded.finalUrl ?? null,
       },
     });

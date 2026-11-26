@@ -53,6 +53,7 @@ export interface RankingRowView {
   scoreError: string | null;
   scoredAt: Date | null;
   jobId: string | null;
+  source: string | null;
 }
 
 export interface RankingRowFilter {
