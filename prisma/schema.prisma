@@ -39,6 +39,7 @@ model User {
   McpAccessToken McpAccessToken[]
   Notification   Notification[]
   aiCalls        AiCall[]
+  JobRanking     JobRanking[]
   ChatConversation ChatConversation?
   defaultResumeId String?
   defaultResume   Resume?          @relation("UserDefaultResume", fields: [defaultResumeId], references: [id], onDelete: SetNull)
@@ -739,4 +740,58 @@ model ChatConversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// "Rank jobs": a CSV of job links scored against all of the user's CVs.
+// The worker (src/lib/jobs/ranking/worker.ts) loads each row's page, then
+// scores loaded rows in batches; both steps resume after a restart.
+model JobRanking {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  status    String   @default("uploading") // RankingStatus in jobRanking.model.ts
+  error     String?
+  total     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  rows      JobRankingRow[]
+
+  @@index([userId, createdAt])
+}
+
+model JobRankingRow {
+  id         String     @id @default(uuid())
+  rankingId  String
+  ranking    JobRanking @relation(fields: [rankingId], references: [id], onDelete: Cascade)
+  position   Int
+  title      String
+  company    String?
+  location   String?
+  url        String?
+  category   String?
+  datePosted String?
+  language   String?
+  remote     String?
+  experience String?
+  skills     String?
+  degree     String?
+
+  loadStatus  String  @default("pending") // "pending" | "loaded" | "failed" | "skipped"
+  loadError   String?
+  finalUrl    String?
+  description String? // plain text, capped
+
+  score           Int?
+  bestResumeId    String?
+  bestResumeTitle String?
+  reason          String?
+  scoreError      String?
+  scoredAt        DateTime?
+
+  jobId String? // set once added to My Jobs; plain id, no FK
+
+  @@index([rankingId, loadStatus])
+  @@index([rankingId, scoredAt])
+  @@index([rankingId, score])
 }
