@@ -49,7 +49,7 @@ import { importJobFromUrl } from "@/actions/job/importFromUrl";
 import { fetchJobPage, JobPageFetchError } from "@/lib/jobs/import/fetchJobPage";
 import { getModel } from "@/lib/ai/providers";
 import { MissingCredentialError } from "@/lib/ai/tools/errors";
-import { resolveCompany } from "@/lib/jobs/resolve";
+import { resolveCompany, resolveJobTitle } from "@/lib/jobs/resolve";
 
 const PAGE = `<html><body>${"<p>Build data pipelines with Python and SAP.</p>".repeat(20)}</body></html>`;
 
@@ -95,6 +95,38 @@ describe("importJobFromUrl", () => {
     expect(data.description).toContain("<h2>Your tasks</h2>");
     expect(data.description).toContain("<li>Build pipelines</li>");
     expect(data.filled).not.toContain("salary");
+    expect(data.descriptionTooShort).toBe(true);
+  });
+
+  it("fills a German posting, preferring the page's own description", async () => {
+    const items = Array.from(
+      { length: 12 },
+      (_, i) => `<li>Aufgabe ${i + 1}: Beratung unserer Kunden zu IT-Sicherheit</li>`,
+    ).join("");
+    (fetchJobPage as any).mockResolvedValue({
+      finalUrl: "https://jobs.bechtle.com/job/Neckarsulm-IT-Consultant-Security-%28wmd%29-74172/78743-de_DE/",
+      html: `<h1>IT Consultant Security (wmd)</h1><span itemprop="description"><h2>Ihre Aufgaben</h2><ul>${items}</ul></span>`,
+    });
+    (generateText as any).mockResolvedValue({
+      output: {
+        ...aiOutput,
+        jobTitle: "IT Consultant Security (wmd)",
+        company: "Bechtle",
+        location: "Neckarsulm, Deutschland",
+        workplaceType: "Homeoffice",
+        jobType: "Vollzeit",
+        description: "## Ihre Aufgaben\n- Beratung",
+      },
+    });
+    const result = await importJobFromUrl(
+      "https://jobs.bechtle.com/job/Neckarsulm-IT-Consultant-Security-%28wmd%29-74172/78743-de_DE/",
+    );
+    const data = (result as any).data;
+    expect(resolveJobTitle).toHaveBeenCalledWith("IT Consultant Security", "user-1");
+    expect(data.workplaceType).toBe("REMOTE");
+    expect(data.jobType).toBe("FT");
+    expect(data.description).toContain("Aufgabe 12: Beratung");
+    expect(data.descriptionTooShort).toBe(false);
   });
 
   it("leaves out fields the posting doesn't state", async () => {
