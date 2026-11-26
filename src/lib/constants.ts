@@ -21,6 +21,10 @@ export const APP_CONSTANTS = {
   // Reading a page and writing out its full description can take a while on
   // a local model; past this the Add Job form gives up and says so.
   JOB_IMPORT_TIMEOUT_MS: 180_000,
+  // Compare all CVs: one AI call reads the job and every CV together, so the
+  // prompt is capped: at most this many CVs, each cut to this many chars.
+  RESUME_COMPARE_MAX: 8,
+  RESUME_COMPARE_CHARS_PER_RESUME: 8_000,
   // Due date given to a new job when none is supplied, on every creation path
   DEFAULT_JOB_DUE_DAYS: 3,
   MIN_QUESTION_LENGTH: 5,

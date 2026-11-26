@@ -14,6 +14,8 @@ export { addJob, updateJob, deleteJobById } from "./job/mutations";
 export { importJobFromUrl, importJobFromText } from "./job/importFromUrl";
 export type { JobUrlImport } from "./job/importFromUrl";
 
+export { compareResumesForJob } from "./job/compareResumes";
+
 export { updateJobStatus, saveJobMatchResult } from "./job/status";
 
 export {

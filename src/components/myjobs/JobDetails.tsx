@@ -27,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { NotesSection } from "./NotesSection";
+import { CompareResumes } from "./CompareResumes";
 import { useState, useMemo } from "react";
 import { MatchDetails } from "../automations/MatchDetails";
 import type { JobMatchData } from "@/models/ai.schemas";
@@ -157,6 +158,8 @@ function JobDetails({
   };
 
   const onMatch = () => requestChat(`Match my resume to ${jobLabel}`);
+  const onMatchWithResume = (resumeTitle: string) =>
+    requestChat(`Match my resume "${resumeTitle}" to ${jobLabel}`);
   const onCoverLetter = () =>
     requestChat(`Write a cover letter for ${jobLabel}`);
 
@@ -289,6 +292,18 @@ function JobDetails({
                 />
               )}
             </Card>
+            <div className="mt-4">
+              <CompareResumes
+                jobId={job.id}
+                onFullMatch={onMatchWithResume}
+                fullMatchDisabled={chatBusy}
+                blockedReason={
+                  job.descriptionCompleteness === "title-only"
+                    ? "Add a job description first"
+                    : undefined
+                }
+              />
+            </div>
           </TabsContent>
           <TabsContent value="timeline" className="mt-4">
             <JobTimelineTab
