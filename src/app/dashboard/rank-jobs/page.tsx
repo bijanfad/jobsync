@@ -14,7 +14,9 @@ export default async function RankJobsPage() {
       <RankJobsContainer
         rankings={result.success ? (result.data ?? []) : []}
         searches={
-          searches.success && searches.data ? searches.data : { searches: [], hasAdzunaKey: false }
+          searches.success && searches.data
+            ? searches.data
+            : { searches: [], hasAdzunaKey: false, email: { configured: false, to: null } }
         }
       />
     </div>

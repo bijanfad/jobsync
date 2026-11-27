@@ -30,7 +30,7 @@ const ORDER = [{ occurredAt: "desc" as const }, { id: "desc" as const }];
 function tabWhere(tab: NotificationTab): Prisma.NotificationWhereInput {
   if (tab === "unread") return { readAt: null };
   if (tab === "errors") return { kind: { in: ERROR_KINDS } };
-  if (tab === "runs") return { kind: "run" };
+  if (tab === "runs") return { kind: { in: ["run", "search"] } };
   return {};
 }
 

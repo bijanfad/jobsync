@@ -102,6 +102,13 @@ describe("ranking actions", () => {
     expect(args.orderBy[0]).toEqual({ score: { sort: "desc", nulls: "last" } });
     expect(args.skip).toBe(50);
     expect(ensureRankingWorker).toHaveBeenCalledWith("rk-1");
+
+    // "New (last 24 h)": rows a search found within the last day
+    db.jobRankingRow.findMany.mockClear();
+    await getRanking("rk-1", 1, { newOnly: true });
+    const since = db.jobRankingRow.findMany.mock.calls[0][0].where.AND[0].foundAt.gte as Date;
+    expect(Date.now() - since.getTime()).toBeGreaterThanOrEqual(24 * 60 * 60 * 1000 - 1000);
+    expect(Date.now() - since.getTime()).toBeLessThan(24 * 60 * 60 * 1000 + 1000);
   });
 
   it("adds ranked rows to My Jobs with the loaded description and best CV", async () => {

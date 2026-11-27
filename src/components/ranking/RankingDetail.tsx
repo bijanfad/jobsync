@@ -42,7 +42,7 @@ import {
   startRanking,
   type RankingPage,
 } from "@/actions/ranking.actions";
-import { RANKING_LIMITS, type RankingRowFilter, type RankingRowView } from "@/models/jobRanking.model";
+import { isNewJob, RANKING_LIMITS, type RankingRowFilter, type RankingRowView } from "@/models/jobRanking.model";
 import { RankingProgress, rankingStatusLabel } from "./RankingProgress";
 
 const POLL_MS = 5_000;
@@ -76,7 +76,16 @@ function LoadIcon({ row }: { row: RankingRowView }) {
   );
 }
 
-export function RankingDetail({ rankingId, initial }: { rankingId: string; initial: RankingPage }) {
+export function RankingDetail({
+  rankingId,
+  initial,
+  initialNewOnly = false,
+}: {
+  rankingId: string;
+  initial: RankingPage;
+  /** Opened from a "new jobs" alert: start on the New filter. */
+  initialNewOnly?: boolean;
+}) {
   const [data, setData] = useState<RankingPage>(initial);
   const [page, setPage] = useState(1);
   const [minScore, setMinScore] = useState("any");
@@ -84,6 +93,7 @@ export function RankingDetail({ rankingId, initial }: { rankingId: string; initi
   const [query, setQuery] = useState("");
   const [loadedOnly, setLoadedOnly] = useState(false);
   const [hideAdded, setHideAdded] = useState(false);
+  const [newOnly, setNewOnly] = useState(initialNewOnly);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
 
@@ -92,6 +102,7 @@ export function RankingDetail({ rankingId, initial }: { rankingId: string; initi
     search: query || undefined,
     loadedOnly,
     hideAdded,
+    newOnly,
   };
   const filterKey = JSON.stringify(filter);
 
@@ -255,6 +266,17 @@ export function RankingDetail({ rankingId, initial }: { rankingId: string; initi
           </div>
           <div className="flex items-center gap-2 pb-2">
             <Switch
+              id="ranking-new-only"
+              checked={newOnly}
+              onCheckedChange={(v) => {
+                setNewOnly(v);
+                setPage(1);
+              }}
+            />
+            <Label htmlFor="ranking-new-only" className="text-xs">New (last 24 h)</Label>
+          </div>
+          <div className="flex items-center gap-2 pb-2">
+            <Switch
               id="ranking-hide-added"
               checked={hideAdded}
               onCheckedChange={(v) => {
@@ -339,6 +361,14 @@ export function RankingDetail({ rankingId, initial }: { rankingId: string; initi
                           </a>
                         ) : (
                           row.title
+                        )}
+                        {isNewJob(row.foundAt) && (
+                          <span
+                            data-testid="new-badge"
+                            className="ml-1.5 inline-block rounded bg-blue-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                          >
+                            New
+                          </span>
                         )}
                       </div>
                       <p className="truncate text-xs text-muted-foreground">

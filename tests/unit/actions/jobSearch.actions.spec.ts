@@ -1,6 +1,14 @@
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/actions/shared", () => ({ requireUser: vi.fn().mockResolvedValue({ id: "user-1" }) }));
+vi.mock("@/actions/shared", () => ({
+  requireUser: vi.fn().mockResolvedValue({ id: "user-1", email: "me@gmail.com" }),
+}));
+const mail = vi.hoisted(() => ({ configured: true, sendMail: vi.fn(async () => {}) }));
+vi.mock("@/lib/email/mailer", () => ({
+  isEmailConfigured: () => mail.configured,
+  alertRecipient: (email: string) => email,
+  sendMail: mail.sendMail,
+}));
 vi.mock("@/lib/jobs/search/run", async (orig) => ({
   ...(await orig<typeof import("@/lib/jobs/search/run")>()),
   runJobSearch: vi.fn().mockResolvedValue(null),
@@ -22,7 +30,13 @@ vi.mock("@/lib/db", () => ({
 
 import prisma from "@/lib/db";
 import { runJobSearch } from "@/lib/jobs/search/run";
-import { getJobSearches, runJobSearchNow, saveAdzunaKey, saveJobSearch } from "@/actions/jobSearch.actions";
+import {
+  getJobSearches,
+  runJobSearchNow,
+  saveAdzunaKey,
+  saveJobSearch,
+  sendTestEmail,
+} from "@/actions/jobSearch.actions";
 
 const db = prisma as any;
 const input = (extra: any = {}) => ({
@@ -58,6 +72,28 @@ describe("job search actions", () => {
       sources: JSON.stringify(["bundesagentur", "personio", "smartrecruiters"]),
     });
     expect(JSON.parse(data.companies)).toEqual({ personio: ["proact", "acme"], smartrecruiters: ["BoschGroup"] });
+  });
+
+  it("saves email alerts, and turning them off drops an owed email", async () => {
+    await saveJobSearch(input({ emailAlerts: true, emailMinScore: 70 }) as any);
+    expect(db.jobSearch.create.mock.calls[0][0].data).toMatchObject({ emailAlerts: true, emailMinScore: 70 });
+    expect(db.jobSearch.create.mock.calls[0][0].data).not.toHaveProperty("digestPendingSince");
+    db.jobSearch.updateMany.mockResolvedValue({ count: 1 });
+    await saveJobSearch(input({ emailAlerts: false }) as any, "s-1");
+    expect(db.jobSearch.updateMany.mock.calls[0][0].data).toMatchObject({ emailAlerts: false, digestPendingSince: null });
+    expect((await saveJobSearch(input({ emailMinScore: 150 }) as any)).success).toBe(false);
+  });
+
+  it("sends a test email to the user, or says email isn't set up", async () => {
+    expect(await sendTestEmail()).toEqual({ success: true, data: { to: "me@gmail.com" } });
+    expect(mail.sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: "me@gmail.com", subject: "JobSync: test email" }));
+    mail.sendMail.mockRejectedValueOnce(new Error("Gmail did not accept the login."));
+    expect(await sendTestEmail()).toEqual({ success: false, message: "Gmail did not accept the login." });
+    mail.configured = false;
+    const res = await sendTestEmail();
+    expect(res.success).toBe(false);
+    expect(!res.success && res.message).toMatch(/not set up/);
+    mail.configured = true;
   });
 
   it("rejects a search without keywords, sites or companies", async () => {
@@ -104,6 +140,7 @@ describe("job search actions", () => {
     db.apiKey.count.mockResolvedValue(1);
     const res = await getJobSearches();
     expect(res.success && res.data?.hasAdzunaKey).toBe(true);
+    expect(res.success && res.data?.email).toEqual({ configured: true, to: "me@gmail.com" });
     expect(res.success && res.data?.searches[0]).toMatchObject({ sources: ["bundesagentur"], lastRun: { added: 4 } });
     expect(db.jobSearch.findMany.mock.calls[0][0].where).toEqual({ userId: "user-1" });
   });

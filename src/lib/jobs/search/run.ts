@@ -17,6 +17,7 @@ import {
   type SearchSourceId,
 } from "@/models/jobSearch.model";
 import { SEARCH_SOURCE_FNS } from "./sources";
+import type { SearchPayload } from "@/models/notification.model";
 import type { SearchHit, SearchQuery, SourceRegistry } from "./types";
 
 // One run of a saved search: ask every chosen site, keep the jobs this
@@ -200,6 +201,7 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
               rankingId,
               position: position++,
               source: sourceLabel(sourceId),
+              foundAt: now,
               title: h.title.slice(0, RANKING_LIMITS.FIELD_CHARS),
               company: h.company?.slice(0, RANKING_LIMITS.FIELD_CHARS),
               location: h.location?.slice(0, RANKING_LIMITS.FIELD_CHARS),
@@ -228,6 +230,7 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
         data: { total: position, status: "running", error: null },
       });
       ensureRankingWorker(rankingId);
+      await announceNewJobs(search, rankingId, summary, now);
     }
     return summary;
   } finally {
@@ -236,6 +239,36 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
       data: { status: "idle", lastRunAt: now, lastRun: JSON.stringify(summary) },
     });
     log.info("[Find jobs] Run finished", { "search.id": searchId, added: summary.added });
+  }
+}
+
+/**
+ * The bell entry for a run that found jobs, and, with email alerts on, a mark
+ * that an email is owed once the new jobs are scored (see digest.ts).
+ * Never throws: a failed notification must not fail the run.
+ */
+async function announceNewJobs(
+  search: { id: string; userId: string; name: string; emailAlerts: boolean; digestPendingSince: Date | null },
+  rankingId: string,
+  summary: SearchRunSummary,
+  now: Date,
+) {
+  try {
+    const payload: SearchPayload = {
+      searchId: search.id,
+      searchName: search.name,
+      rankingId,
+      added: summary.added,
+    };
+    await prisma.notification.create({
+      data: { userId: search.userId, kind: "search", payload: JSON.stringify(payload), occurredAt: now },
+    });
+    // Keep the oldest mark: a second run before the email goes out joins it.
+    if (search.emailAlerts && !search.digestPendingSince) {
+      await prisma.jobSearch.update({ where: { id: search.id }, data: { digestPendingSince: now } });
+    }
+  } catch (error) {
+    log.error("[Find jobs] Could not record the new-jobs alert", { "search.id": search.id, error: String(error) });
   }
 }
 

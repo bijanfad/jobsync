@@ -23,8 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { saveAdzunaKey, saveJobSearch, suggestJobTitles } from "@/actions/jobSearch.actions";
 import {
+  saveAdzunaKey,
+  saveJobSearch,
+  sendTestEmail,
+  suggestJobTitles,
+} from "@/actions/jobSearch.actions";
+import {
+  EMAIL_MIN_SCORES,
   SEARCH_LIMITS,
   SEARCH_SOURCES,
   splitKeywords,
@@ -38,6 +44,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   search: JobSearchView | null;
   hasAdzunaKey: boolean;
+  /** Whether SMTP is set up in .env, and where alerts would go. */
+  email?: { configured: boolean; to: string | null };
   onSaved: (id: string, runNow: boolean) => void;
   /** Start by asking the AI for titles from the CVs ("Job list from my CVs"). */
   suggestOnOpen?: boolean;
@@ -64,6 +72,7 @@ export function JobSearchDialog({
   onOpenChange,
   search,
   hasAdzunaKey,
+  email = { configured: false, to: null },
   onSaved,
   suggestOnOpen = false,
 }: Props) {
@@ -77,6 +86,9 @@ export function JobSearchDialog({
   const [radius, setRadius] = useState(String(search?.radiusKm ?? 50));
   const [age, setAge] = useState(String(search?.maxAgeDays ?? 7));
   const [daily, setDaily] = useState(search?.daily ?? true);
+  const [emailAlerts, setEmailAlerts] = useState(search?.emailAlerts ?? false);
+  const [emailMinScore, setEmailMinScore] = useState(String(search?.emailMinScore ?? 60));
+  const [testing, setTesting] = useState(false);
   const [sources, setSources] = useState<Set<SearchSourceId>>(
     new Set(search?.sources ?? DEFAULT_SOURCES),
   );
@@ -125,6 +137,14 @@ export function JobSearchDialog({
     void suggest();
   }, [open, suggestOnOpen]);
 
+  const testEmail = async () => {
+    setTesting(true);
+    const res = await sendTestEmail();
+    setTesting(false);
+    if (!res.success) toastError(res.message);
+    else toastSuccess(`Test email sent to ${res.data?.to}. Check your inbox (and spam).`);
+  };
+
   const download = () => {
     const blob = new Blob([`${splitKeywords(keywords).join("\n")}\n`], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -171,6 +191,8 @@ export function JobSearchDialog({
             Object.entries(companies).map(([k, v]) => [k, v.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)]),
           ) as Partial<Record<CareerSourceId, string[]>>,
           daily,
+          emailAlerts,
+          emailMinScore: Number(emailMinScore),
         },
         search?.id,
       );
@@ -315,6 +337,53 @@ export function JobSearchDialog({
               <Switch id="search-daily" checked={daily} onCheckedChange={setDaily} />
               <Label htmlFor="search-daily">Run automatically every day</Label>
             </div>
+          </div>
+
+          <div className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center gap-2">
+              <Switch id="search-email" checked={emailAlerts} onCheckedChange={setEmailAlerts} />
+              <Label htmlFor="search-email">Email me new matches</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              After each run, once the new jobs are scored, you get one email with the best ones. No
+              email on days without new matches.
+            </p>
+            {emailAlerts && (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label>Only jobs with a score of</Label>
+                  <Select value={emailMinScore} onValueChange={setEmailMinScore}>
+                    <SelectTrigger aria-label="Minimum score for email" className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EMAIL_MIN_SCORES.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} or more
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!email.configured || testing}
+                  onClick={testEmail}
+                >
+                  {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Send test email
+                </Button>
+              </div>
+            )}
+            {emailAlerts && (
+              <p className="text-xs text-muted-foreground" data-testid="email-status">
+                {email.configured
+                  ? `Emails go to ${email.to ?? "your login email"}.`
+                  : "Email is not set up yet: add your Gmail address and app password (SMTP_USER and SMTP_PASS) to the .env file and restart JobSync. You still get the bell notification."}
+              </p>
+            )}
           </div>
 
           <fieldset className="space-y-2">

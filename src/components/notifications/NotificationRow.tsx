@@ -10,6 +10,7 @@ import {
   formatClock,
   formatShortAge,
   isErrorNotification,
+  notificationSourceName,
 } from "./notificationDisplay";
 
 interface NotificationRowProps {
@@ -37,7 +38,7 @@ export function NotificationRow({ item, variant, onRemove, onOpenLink }: Notific
     >
       {isPage && (
         <span className="hidden w-[200px] shrink-0 truncate pt-1.5 text-sm text-muted-foreground sm:block">
-          {item.automation.name}
+          {notificationSourceName(item)}
         </span>
       )}
       <div
@@ -81,7 +82,7 @@ export function NotificationRow({ item, variant, onRemove, onOpenLink }: Notific
             data-testid="row-meta-mobile"
             className="truncate text-xs text-muted-foreground sm:hidden"
           >
-            {item.automation.name} · {formatClock(item.occurredAt)}
+            {notificationSourceName(item)} · {formatClock(item.occurredAt)}
           </span>
         )}
         <span className="text-[13px] text-muted-foreground" title={d.hint ?? undefined}>
