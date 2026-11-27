@@ -3,8 +3,8 @@ import "server-only";
 import { ATS_PROVIDERS } from "@/lib/scraper/ats/registry";
 import { decodeHtml } from "@/lib/scraper/html";
 import type { JobBoard } from "@/models/automation.model";
-import { SEARCH_LIMITS } from "@/models/jobSearch.model";
-import { feedText, isoDate, matchesKeywords, matchesLocation, withinAge } from "./match";
+import { perKeywordLimit, SEARCH_LIMITS } from "@/models/jobSearch.model";
+import { feedText, isoDate, matchesLocation, matchingKeyword, withinAge } from "./match";
 import {
   SearchSourceError,
   type SearchHit,
@@ -46,14 +46,18 @@ async function getText(ctx: SourceContext, url: string): Promise<string> {
   return res.text();
 }
 
+/** For sites that list every job: keep the ones a title asks for, tagged with that title. */
 const keepWanted = (hits: SearchHit[], q: SearchQuery, ctx: SourceContext, posted: (h: SearchHit) => string | undefined) =>
   hits
-    .filter(
-      (h) =>
-        matchesKeywords(`${h.title} ${h.skills ?? ""}`, q.keywords) &&
-        matchesLocation(h.location, Boolean(h.remote), q.location) &&
-        withinAge(posted(h), q, ctx.now),
-    )
+    .flatMap((h) => {
+      const keyword = q.keywords.length
+        ? matchingKeyword(`${h.title} ${h.skills ?? ""}`, q.keywords)
+        : undefined;
+      if (q.keywords.length && !keyword) return [];
+      if (!matchesLocation(h.location, Boolean(h.remote), q.location)) return [];
+      if (!withinAge(posted(h), q, ctx.now)) return [];
+      return [{ ...h, keyword }];
+    })
     .slice(0, MAX);
 
 // ── Bundesagentur für Arbeit ───────────────────────────────────────────────
@@ -80,13 +84,16 @@ const BA_PAGE = 100;
 
 export async function searchBundesagentur(q: SearchQuery, ctx: SourceContext): Promise<SearchHit[]> {
   const hits: SearchHit[] = [];
-  const perKeyword = Math.max(BA_PAGE, Math.ceil(MAX / Math.max(1, q.keywords.length)));
+  // One title at a time, each up to its share of the source's budget.
+  const perKeyword = perKeywordLimit(q.keywords.length);
+  const size = Math.min(BA_PAGE, perKeyword);
   for (const keyword of q.keywords.length ? q.keywords : [""]) {
-    for (let page = 1; page * BA_PAGE <= perKeyword + BA_PAGE - 1; page++) {
+    let found = 0;
+    for (let page = 1; found < perKeyword; page++) {
       const params = new URLSearchParams({
         angebotsart: "1",
         page: String(page),
-        size: String(BA_PAGE),
+        size: String(size),
         veroeffentlichtseit: String(q.maxAgeDays),
       });
       if (keyword) params.set("was", keyword);
@@ -103,7 +110,10 @@ export async function searchBundesagentur(q: SearchQuery, ctx: SourceContext): P
         const title = job.stellenangebotsTitel ?? job.hauptberuf;
         if (!ref || !title) continue;
         const place = job.stellenlokationen?.[0]?.adresse;
+        if (found >= perKeyword) break;
+        found++;
         hits.push({
+          keyword: keyword || undefined,
           title,
           company: job.firma,
           location: place?.ort,
@@ -113,7 +123,7 @@ export async function searchBundesagentur(q: SearchQuery, ctx: SourceContext): P
           remote: job.homeofficemoeglich ? "Home office possible" : undefined,
         });
       }
-      if (list.length < BA_PAGE || page * BA_PAGE >= (data.maxErgebnisse ?? 0)) break;
+      if (list.length < size || page * size >= (data.maxErgebnisse ?? 0)) break;
     }
   }
   return hits.slice(0, MAX);
@@ -183,7 +193,8 @@ export async function searchAdzuna(q: SearchQuery, ctx: SourceContext): Promise<
     throw new SearchSourceError("Add your Adzuna app id and key to search Adzuna.");
   }
   const hits: SearchHit[] = [];
-  const pages = Math.max(1, Math.ceil(MAX / ADZUNA_PAGE / Math.max(1, q.keywords.length)));
+  const perKeyword = perKeywordLimit(q.keywords.length);
+  const pages = Math.max(1, Math.ceil(perKeyword / ADZUNA_PAGE));
   for (const keyword of q.keywords.length ? q.keywords : [""]) {
     for (let page = 1; page <= pages; page++) {
       const params = new URLSearchParams({
@@ -206,6 +217,7 @@ export async function searchAdzuna(q: SearchQuery, ctx: SourceContext): Promise<
       for (const job of list) {
         if (!job.title || !job.redirect_url) continue;
         hits.push({
+          keyword: keyword || undefined,
           title: decodeHtml(job.title).replace(/<[^>]+>/g, ""),
           company: job.company?.display_name,
           location: job.location?.display_name,
@@ -329,8 +341,9 @@ export async function searchSmartRecruiters(q: SearchQuery, ctx: SourceContext):
   const hits = await eachCompany(ctx, async (slug) => {
     const out: SearchHit[] = [];
     // Its own full-text search, one keyword at a time, keeps big employers fast.
+    const perKeyword = perKeywordLimit(q.keywords.length);
     for (const keyword of q.keywords.length ? q.keywords : [""]) {
-      for (let offset = 0; offset < MAX; offset += SR_PAGE) {
+      for (let offset = 0; offset < perKeyword; offset += SR_PAGE) {
         const params = new URLSearchParams({ limit: String(SR_PAGE), offset: String(offset) });
         if (keyword) params.set("q", keyword);
         const data = await getJson<{ content?: SmartRecruitersPosting[]; totalFound?: number }>(
@@ -340,6 +353,7 @@ export async function searchSmartRecruiters(q: SearchQuery, ctx: SourceContext):
         for (const p of data.content ?? []) {
           if (!p.id || !p.name) continue;
           out.push({
+            keyword: keyword || undefined,
             title: p.name,
             company: p.company?.name ?? slug,
             location: p.location?.fullLocation ?? p.location?.city,

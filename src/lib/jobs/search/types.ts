@@ -12,6 +12,8 @@ export interface SearchQuery {
 export interface SearchHit extends RankingRowInput {
   url: string;
   description?: string;
+  /** The search title that found it, for the per-title counts. */
+  keyword?: string;
 }
 
 export interface SourceContext {
