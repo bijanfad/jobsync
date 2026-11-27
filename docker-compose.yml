@@ -51,7 +51,10 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - RAPIDAPI_KEY=${RAPIDAPI_KEY:-}
-      # Email for Find jobs alerts (Gmail: an app password, see .env.example)
+      # Email for Find jobs alerts: Brevo, or SMTP such as Gmail (see .env.example)
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
+      - BREVO_SENDER=${BREVO_SENDER:-}
+      - EMAIL_TO=${EMAIL_TO:-}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-}
       - SMTP_USER=${SMTP_USER:-}

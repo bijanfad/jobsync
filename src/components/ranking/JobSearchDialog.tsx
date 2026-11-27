@@ -381,7 +381,7 @@ export function JobSearchDialog({
               <p className="text-xs text-muted-foreground" data-testid="email-status">
                 {email.configured
                   ? `Emails go to ${email.to ?? "your login email"}.`
-                  : "Email is not set up yet: add your Gmail address and app password (SMTP_USER and SMTP_PASS) to the .env file and restart JobSync. You still get the bell notification."}
+                  : "Email is not set up yet: add BREVO_API_KEY and BREVO_SENDER (or a Gmail app password in SMTP_USER and SMTP_PASS) to the .env file and restart JobSync. You still get the bell notification."}
               </p>
             )}
           </div>

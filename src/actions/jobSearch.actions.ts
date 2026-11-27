@@ -289,10 +289,10 @@ export async function sendTestEmail(): Promise<ActionResult<{ to: string }>> {
   try {
     const user = await requireUser();
     if (!isEmailConfigured()) {
-      return fail("Email is not set up yet. Add SMTP_USER and SMTP_PASS to your .env file and restart JobSync.");
+      return fail("Email is not set up yet. Add BREVO_API_KEY and BREVO_SENDER (or SMTP_USER and SMTP_PASS) to your .env file and restart JobSync.");
     }
     const to = alertRecipient(user.email);
-    if (!to) return fail("There is no address to send to. Add SMTP_TO to your .env file.");
+    if (!to) return fail("There is no address to send to. Add EMAIL_TO to your .env file.");
     await sendMail({
       to,
       subject: "JobSync: test email",

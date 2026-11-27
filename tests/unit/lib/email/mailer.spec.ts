@@ -12,6 +12,8 @@ vi.mock("nodemailer", () => ({
 import {
   alertRecipient,
   appBaseUrl,
+  emailProvider,
+  parseAddress,
   escapeHtml,
   friendlyMailError,
   isEmailConfigured,
@@ -19,7 +21,10 @@ import {
   sendMail,
 } from "@/lib/email/mailer";
 
-const KEYS = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "SMTP_TO", "NEXTAUTH_URL"];
+const KEYS = [
+  "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "SMTP_TO", "NEXTAUTH_URL",
+  "BREVO_API_KEY", "BREVO_SENDER", "EMAIL_TO",
+];
 
 describe("mailer", () => {
   const saved: Record<string, string | undefined> = {};
@@ -79,7 +84,7 @@ describe("mailer", () => {
     process.env.SMTP_PASS = "wrong";
     h.sendMail.mockRejectedValueOnce(Object.assign(new Error("535-5.7.8 Username and Password not accepted"), { code: "EAUTH", responseCode: 535 }));
     await expect(sendMail({ to: "a@b.c", subject: "s", html: "h", text: "t" })).rejects.toThrow(/app password/);
-    expect(friendlyMailError({ code: "ETIMEDOUT" })).toMatch(/Could not reach/);
+    expect(friendlyMailError({ code: "ETIMEDOUT" })).toMatch(/use Brevo/);
   });
 
   it("refuses to send when not set up", async () => {
@@ -98,5 +103,62 @@ describe("mailer", () => {
   it("builds links from NEXTAUTH_URL and escapes HTML", () => {
     expect(appBaseUrl({ NEXTAUTH_URL: "https://jobs.example.com/" } as any)).toBe("https://jobs.example.com");
     expect(escapeHtml(`<a href="x">Tom & 'Jerry'</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;Tom &amp; &#39;Jerry&#39;&lt;/a&gt;");
+  });
+
+  describe("Brevo", () => {
+    const ok = () => vi.fn(async (..._args: any[]) => new Response('{"messageId":"m"}', { status: 201 }));
+    const msg = { to: "me@gmail.com", subject: "Hi", html: "<p>Hi</p>", text: "Hi" };
+
+    it("is used instead of SMTP when BREVO_API_KEY is set", async () => {
+      process.env.SMTP_USER = "me@gmail.com";
+      process.env.SMTP_PASS = "pw";
+      expect(emailProvider()).toBe("smtp");
+      process.env.BREVO_API_KEY = "xkeysib-abc";
+      process.env.BREVO_SENDER = "JobSync <me@gmail.com>";
+      expect(emailProvider()).toBe("brevo");
+
+      const fetchImpl = ok();
+      await sendMail(msg, fetchImpl as any);
+      expect(h.createTransport).not.toHaveBeenCalled();
+      const [url, init] = fetchImpl.mock.calls[0] as any[];
+      expect(url).toBe("https://api.brevo.com/v3/smtp/email");
+      expect(init.headers["api-key"]).toBe("xkeysib-abc");
+      expect(JSON.parse(init.body)).toEqual({
+        sender: { name: "JobSync", email: "me@gmail.com" },
+        to: [{ email: "me@gmail.com" }],
+        subject: "Hi",
+        htmlContent: "<p>Hi</p>",
+        textContent: "Hi",
+      });
+    });
+
+    it("needs a sender address, and falls back to SMTP_FROM or EMAIL_TO", () => {
+      process.env.BREVO_API_KEY = "xkeysib-abc";
+      expect(emailProvider()).toBeNull();
+      process.env.EMAIL_TO = "me@gmail.com";
+      expect(emailProvider()).toBe("brevo");
+      expect(alertRecipient("login@example.com")).toBe("me@gmail.com");
+    });
+
+    it("explains Brevo's refusals in plain words", async () => {
+      process.env.BREVO_API_KEY = "xkeysib-bad";
+      process.env.BREVO_SENDER = "me@gmail.com";
+      const answer = (status: number, message: string) =>
+        vi.fn(async () => new Response(JSON.stringify({ code: "x", message }), { status }));
+      await expect(sendMail(msg, answer(401, "Key not found") as any)).rejects.toThrow(/API key/);
+      await expect(sendMail(msg, answer(400, "Sender is not valid") as any)).rejects.toThrow(/Senders/);
+      await expect(
+        sendMail(msg, answer(401, "We have detected you are using an unrecognised IP address 1.2.3.4") as any),
+      ).rejects.toThrow(/Authorised IPs/);
+      await expect(
+        sendMail(msg, vi.fn(async () => { throw new TypeError("fetch failed"); }) as any),
+      ).rejects.toThrow(/Could not reach Brevo/);
+    });
+
+    it("reads sender addresses with or without a name", () => {
+      expect(parseAddress('"JobSync" <a@b.de>')).toEqual({ name: "JobSync", email: "a@b.de" });
+      expect(parseAddress("a@b.de")).toEqual({ email: "a@b.de" });
+      expect(parseAddress("not an address")).toBeNull();
+    });
   });
 });
