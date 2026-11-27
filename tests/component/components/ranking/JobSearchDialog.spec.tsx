@@ -114,7 +114,7 @@ describe("mergeTitles", () => {
     const user = userEvent.setup();
     render(<JobSearchDialog open onOpenChange={vi.fn()} search={null} hasAdzunaKey={false} onSaved={vi.fn()} />);
     await user.click(screen.getByRole("switch", { name: "Email me new matches" }));
-    expect(screen.getByTestId("email-status")).toHaveTextContent(/SMTP_USER and SMTP_PASS/);
+    expect(screen.getByTestId("email-status")).toHaveTextContent(/BREVO_API_KEY and BREVO_SENDER/);
     expect(screen.getByRole("button", { name: "Send test email" })).toBeDisabled();
   });
 
