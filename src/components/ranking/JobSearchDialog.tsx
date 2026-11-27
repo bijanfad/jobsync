@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, FileUp, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,10 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { saveAdzunaKey, saveJobSearch } from "@/actions/jobSearch.actions";
+import { saveAdzunaKey, saveJobSearch, suggestJobTitles } from "@/actions/jobSearch.actions";
 import {
   SEARCH_LIMITS,
   SEARCH_SOURCES,
+  splitKeywords,
   type CareerSourceId,
   type JobSearchView,
   type SearchSourceId,
@@ -38,14 +39,40 @@ interface Props {
   search: JobSearchView | null;
   hasAdzunaKey: boolean;
   onSaved: (id: string, runNow: boolean) => void;
+  /** Start by asking the AI for titles from the CVs ("Job list from my CVs"). */
+  suggestOnOpen?: boolean;
+}
+
+interface Suggestion {
+  title: string;
+  fit: "core" | "adjacent";
+  why: string;
+}
+
+/** Titles in `add` that `list` doesn't have yet, appended one per line. */
+export function mergeTitles(list: string, add: string[]): { text: string; added: number } {
+  const current = splitKeywords(list);
+  const have = new Set(current.map((t) => t.toLowerCase()));
+  const fresh = add.filter((t) => !have.has(t.toLowerCase()));
+  return { text: [...current, ...fresh].join("\n"), added: fresh.length };
 }
 
 const DEFAULT_SOURCES: SearchSourceId[] = ["bundesagentur", "arbeitnow"];
 
-export function JobSearchDialog({ open, onOpenChange, search, hasAdzunaKey, onSaved }: Props) {
+export function JobSearchDialog({
+  open,
+  onOpenChange,
+  search,
+  hasAdzunaKey,
+  onSaved,
+  suggestOnOpen = false,
+}: Props) {
   // Remounted per search (key on the parent), so the initial state is the form's reset.
-  const [name, setName] = useState(search?.name ?? "");
-  const [keywords, setKeywords] = useState(search?.keywords ?? "");
+  const [name, setName] = useState(search?.name ?? (suggestOnOpen ? "Jobs from my CVs" : ""));
+  const [keywords, setKeywords] = useState(search ? splitKeywords(search.keywords).join("\n") : "");
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const importInput = useRef<HTMLInputElement>(null);
   const [location, setLocation] = useState(search?.location ?? "");
   const [radius, setRadius] = useState(String(search?.radiusKm ?? 50));
   const [age, setAge] = useState(String(search?.maxAgeDays ?? 7));
@@ -71,6 +98,56 @@ export function JobSearchDialog({ open, onOpenChange, search, hasAdzunaKey, onSa
     });
 
   const needsAdzunaKey = sources.has("adzuna") && !hasAdzunaKey;
+  const titleCount = splitKeywords(keywords).length;
+
+  const suggest = async () => {
+    setSuggesting(true);
+    const res = await suggestJobTitles();
+    setSuggesting(false);
+    if (!res.success) {
+      toastError(res.message);
+      return;
+    }
+    const list = res.data ?? [];
+    setSuggestions(list);
+    setKeywords((prev) => {
+      const { text, added } = mergeTitles(prev, list.map((t) => t.title));
+      toastSuccess(`${added} job titles added from your CVs. Remove any you don't want.`);
+      return text;
+    });
+  };
+
+  // "Job list from my CVs" opens straight into the suggestion.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!open || !suggestOnOpen || asked.current) return;
+    asked.current = true;
+    void suggest();
+  }, [open, suggestOnOpen]);
+
+  const download = () => {
+    const blob = new Blob([`${splitKeywords(keywords).join("\n")}\n`], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "joblist.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importList = async (file: File | undefined) => {
+    if (!file) return;
+    const text = await file.text();
+    // One title per line; a CSV's first column also works.
+    const titles = text
+      .split(/\r?\n/)
+      .map((line) => line.split(/[;,\t]/)[0].replace(/^"|"$/g, "").trim())
+      .filter((t) => t && !/^(title|titel|job ?title|stellentitel)$/i.test(t));
+    const { text: merged, added } = mergeTitles(keywords, titles);
+    setKeywords(merged);
+    toastSuccess(`${added} job titles imported.`);
+    if (importInput.current) importInput.current.value = "";
+  };
 
   const submit = async (runNow: boolean) => {
     setSaving(true);
@@ -84,7 +161,7 @@ export function JobSearchDialog({ open, onOpenChange, search, hasAdzunaKey, onSa
       }
       const res = await saveJobSearch(
         {
-          name: name || keywords.split(",")[0] || "Job search",
+          name: name || splitKeywords(keywords)[0] || "Job search",
           keywords,
           location: location.trim() || undefined,
           radiusKm: Number(radius),
@@ -125,14 +202,64 @@ export function JobSearchDialog({ open, onOpenChange, search, hasAdzunaKey, onSa
 
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="search-keywords">Keywords (comma-separated, any can match)</Label>
-              <Input
+            <div className="space-y-2 sm:col-span-2">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <Label htmlFor="search-keywords">
+                  Job list: titles to search, one per line ({titleCount} of {SEARCH_LIMITS.MAX_KEYWORDS})
+                </Label>
+                <div className="flex flex-wrap gap-1">
+                  <Button type="button" size="sm" variant="secondary" disabled={suggesting} onClick={suggest}>
+                    {suggesting ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-1 h-3 w-3" />
+                    )}
+                    {suggesting ? "Reading your CVs…" : "Suggest from my CVs"}
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" disabled={titleCount === 0} onClick={download}>
+                    <Download className="mr-1 h-3 w-3" /> Download
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => importInput.current?.click()}>
+                    <FileUp className="mr-1 h-3 w-3" /> Import
+                  </Button>
+                  <input
+                    ref={importInput}
+                    type="file"
+                    accept=".txt,.csv,text/plain,text/csv"
+                    className="hidden"
+                    data-testid="job-list-file"
+                    onChange={(e) => importList(e.target.files?.[0])}
+                  />
+                </div>
+              </div>
+              <Textarea
                 id="search-keywords"
                 value={keywords}
                 onChange={(e) => setKeywords(e.target.value)}
-                placeholder="IT-Administrator, Systemadministrator, IT Security"
+                placeholder={"IT-Administrator\nSystemadministrator\nIT Security Engineer"}
+                className="min-h-32 font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground">
+                Each title is searched on its own, one after another, on every site. Sites without
+                their own search keep jobs whose title contains one of these.
+              </p>
+              {suggestions.length > 0 && (
+                <details className="rounded-md border p-2 text-xs">
+                  <summary className="cursor-pointer font-medium">Why the AI suggested these</summary>
+                  <ul className="mt-2 space-y-1">
+                    {suggestions.map((t) => (
+                      <li key={t.title}>
+                        <span className="font-medium">{t.title}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {t.fit === "core" ? "main fit" : "realistic stretch"}
+                          {t.why ? ` · ${t.why}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="search-location">Place (leave empty for all of Germany)</Label>

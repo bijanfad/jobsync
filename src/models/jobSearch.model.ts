@@ -82,6 +82,8 @@ export interface SearchRunSummary {
   at: string; // ISO
   added: number;
   sources: Partial<Record<SearchSourceId, SearchSourceResult>>;
+  /** Per search title, across all sites: jobs found and new jobs added. */
+  titles?: Record<string, { found: number; added: number }>;
 }
 
 export interface JobSearchView {
@@ -113,22 +115,35 @@ export interface JobSearchInput {
 
 export const SEARCH_LIMITS = {
   MAX_SEARCHES: 20,
-  MAX_KEYWORDS: 10,
+  /** A job list from the CVs can be long; each title is its own search. */
+  MAX_KEYWORDS: 60,
   MAX_COMPANIES_PER_SOURCE: 50,
   /** Jobs kept per source per run. */
-  MAX_PER_SOURCE: 1_000,
+  MAX_PER_SOURCE: 2_000,
+  /** Per title on sites searched one title at a time, so every title gets its share. */
+  MIN_PER_KEYWORD: 25,
   RADIUS_OPTIONS: [10, 25, 50, 100, 200],
   AGE_OPTIONS: [1, 3, 7, 14, 30],
 } as const;
 
-/** Splits "IT-Administrator, Security; SOC" into keywords. */
+/** Splits "IT-Administrator, Security; SOC" or one title per line into keywords. */
 export function splitKeywords(raw: string): string[] {
-  return [
-    ...new Set(
-      raw
-        .split(/[,;\n]/)
-        .map((k) => k.trim())
-        .filter((k) => k.length >= 2),
-    ),
-  ].slice(0, SEARCH_LIMITS.MAX_KEYWORDS);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[,;\n]/)) {
+    const k = part.trim().slice(0, 80);
+    const key = k.toLowerCase();
+    if (k.length < 2 || seen.has(key)) continue;
+    seen.add(key);
+    out.push(k);
+  }
+  return out.slice(0, SEARCH_LIMITS.MAX_KEYWORDS);
+}
+
+/** Per-title budget on sites searched one title at a time. */
+export function perKeywordLimit(keywordCount: number): number {
+  return Math.max(
+    SEARCH_LIMITS.MIN_PER_KEYWORD,
+    Math.floor(SEARCH_LIMITS.MAX_PER_SOURCE / Math.max(1, keywordCount)),
+  );
 }

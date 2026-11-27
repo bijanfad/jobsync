@@ -21,6 +21,9 @@ import {
   type JobSearchView,
   type SearchCompanies,
 } from "@/models/jobSearch.model";
+import { RankingSetupError } from "@/lib/jobs/ranking/score";
+import { checkRateLimit } from "@/lib/ai/rate-limiter";
+import { suggestTitlesFromCvs, type SuggestedTitle } from "@/lib/jobs/search/suggestTitles";
 import type { ActionResult } from "@/models/action.model";
 import { requireUser } from "./shared";
 
@@ -53,7 +56,7 @@ function companySlug(source: string, raw: string): string | null {
 
 const SearchInputSchema = z.object({
   name: z.string().trim().min(1, "Give the search a name.").max(100),
-  keywords: z.string().max(500),
+  keywords: z.string().max(6_000),
   location: z.string().trim().max(100).optional(),
   radiusKm: z.number().int().min(0).max(500),
   maxAgeDays: z.number().int().min(1).max(60),
@@ -144,7 +147,8 @@ export async function saveJobSearch(
 
     const fields = {
       name: data.name,
-      keywords: keywords.join(", "),
+      // One title per line: a job list from the CVs is read and edited as a list.
+      keywords: keywords.join("\n"),
       location: data.location || null,
       radiusKm: data.radiusKm,
       maxAgeDays: data.maxAgeDays,
@@ -240,5 +244,25 @@ export async function deleteAdzunaKey(): Promise<ActionResult<null>> {
   } catch (error) {
     log.error("Delete Adzuna key failed", { error: String(error) });
     return fail("Couldn't remove the Adzuna key.");
+  }
+}
+
+/** Reads all the user's CVs with AI and suggests the job titles to search for. */
+export async function suggestJobTitles(): Promise<ActionResult<SuggestedTitle[]>> {
+  try {
+    const user = await requireUser();
+    const rateLimit = checkRateLimit(user.id);
+    if (!rateLimit.allowed) {
+      return fail(`Too many AI requests. Try again in ${Math.ceil(rateLimit.resetIn / 1000)} seconds.`);
+    }
+    const titles = await suggestTitlesFromCvs(user.id);
+    if (titles.length === 0) return fail("The AI didn't suggest any titles. Try again.");
+    return { success: true, data: titles };
+  } catch (error) {
+    if (error instanceof RankingSetupError) {
+      return fail(error.message.replace(/, then resume the ranking\.$/, "."));
+    }
+    log.error("Suggest job titles failed", { error: String(error) });
+    return fail("The AI couldn't read your CVs this time. Try again, or check your AI Settings.");
   }
 }

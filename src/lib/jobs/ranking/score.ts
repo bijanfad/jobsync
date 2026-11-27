@@ -44,7 +44,10 @@ export interface RankScorer {
 }
 
 /** Loads the user's CVs and AI model once per worker run. */
-export async function prepareScorer(userId: string): Promise<RankScorer> {
+export async function prepareScorer(
+  userId: string,
+  resumeChars = RESUME_CHARS,
+): Promise<RankScorer> {
   const resumes = await prisma.resume.findMany({
     where: { profile: { userId } },
     include: resumeDetailInclude,
@@ -58,7 +61,7 @@ export async function prepareScorer(userId: string): Promise<RankScorer> {
       usable.push({
         id: resume.id,
         title: resume.title,
-        text: pre.data.normalizedText.slice(0, RESUME_CHARS),
+        text: pre.data.normalizedText.slice(0, resumeChars),
       });
     }
   }

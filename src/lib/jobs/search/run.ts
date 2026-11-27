@@ -134,7 +134,12 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
   if (!search) return null;
   await prisma.jobSearch.update({ where: { id: searchId }, data: { status: "running" } });
 
-  const summary: SearchRunSummary = { at: now.toISOString(), added: 0, sources: {} };
+  const summary: SearchRunSummary = { at: now.toISOString(), added: 0, sources: {}, titles: {} };
+  const tally = (keyword: string | undefined, field: "found" | "added") => {
+    if (!keyword) return;
+    const t = (summary.titles![keyword] ??= { found: 0, added: 0 });
+    t[field]++;
+  };
   try {
     const rankingId = await ensureRanking(search);
     const existing = await prisma.jobRankingRow.findMany({
@@ -151,6 +156,8 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
       radiusKm: search.radiusKm,
       maxAgeDays: search.maxAgeDays,
     };
+    // Every title shows in the results, also those that found nothing.
+    for (const k of query.keywords) summary.titles![k] = { found: 0, added: 0 };
     const companies = parseCompanies(search.companies);
     const sources = opts.sources ?? SEARCH_SOURCE_FNS;
     const adzuna = parseSources(search.sources).includes("adzuna")
@@ -173,6 +180,7 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
         log.error("[Find jobs] Source failed", { "search.id": searchId, source: sourceId, error: message });
         continue;
       }
+      hits.forEach((h) => tally(h.keyword, "found"));
       const fresh = hits.filter((h) => {
         const key = safeUrlKey(h.url);
         const tk = titleKey(h);
@@ -183,6 +191,7 @@ async function runOnce(searchId: string, opts: RunOptions): Promise<SearchRunSum
       });
       const kept = fresh.slice(0, Math.max(0, room));
       room -= kept.length;
+      kept.forEach((h) => tally(h.keyword, "added"));
       if (kept.length > 0) {
         await prisma.jobRankingRow.createMany({
           data: kept.map((h) => {

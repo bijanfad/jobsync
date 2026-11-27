@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { CalendarClock, Loader2, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarClock, Loader2, Pencil, Play, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { toastActionResult, toastError } from "@/lib/toast";
@@ -12,10 +12,22 @@ import {
   getJobSearches,
   runJobSearchNow,
 } from "@/actions/jobSearch.actions";
-import { sourceLabel, type JobSearchView, type SearchSourceId } from "@/models/jobSearch.model";
+import {
+  sourceLabel,
+  splitKeywords,
+  type JobSearchView,
+  type SearchSourceId,
+} from "@/models/jobSearch.model";
 import { JobSearchDialog } from "./JobSearchDialog";
 
 const POLL_MS = 4_000;
+
+function titleSummary(keywords: string): string {
+  const titles = splitKeywords(keywords);
+  return titles.length > 4
+    ? `${titles.slice(0, 3).join(", ")} and ${titles.length - 3} more titles`
+    : titles.join(", ");
+}
 
 function LastRun({ search }: { search: JobSearchView }) {
   const run = search.lastRun;
@@ -37,6 +49,20 @@ function LastRun({ search }: { search: JobSearchView }) {
         {format(new Date(run.at), "PPp")}: {run.added.toLocaleString()} new jobs
         {parts.filter(Boolean).length > 0 && ` (${parts.filter(Boolean).join(", ")})`}
       </p>
+      {run.titles && Object.keys(run.titles).length > 1 && (
+        <details>
+          <summary className="cursor-pointer">Results per title</summary>
+          <ul className="mt-1 grid gap-x-4 sm:grid-cols-2">
+            {Object.entries(run.titles)
+              .sort((a, b) => b[1].found - a[1].found)
+              .map(([title, t]) => (
+                <li key={title}>
+                  {title}: {t.found} found, {t.added} new
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
       {errors.map(([id, r]) => (
         <p key={id} className="text-amber-700 dark:text-amber-400">
           {sourceLabel(id)}: {r.error}
@@ -55,6 +81,7 @@ export function FindJobs({
   const [editing, setEditing] = useState<JobSearchView | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogKey, setDialogKey] = useState(0);
+  const [fromCvs, setFromCvs] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<JobSearchView | null>(null);
   const [kicked, setKicked] = useState(false);
 
@@ -76,8 +103,9 @@ export function FindJobs({
     return () => clearInterval(t);
   }, [running]);
 
-  const open = (search: JobSearchView | null) => {
+  const open = (search: JobSearchView | null, suggest = false) => {
     setEditing(search);
+    setFromCvs(suggest);
     setDialogKey((k) => k + 1);
     setDialogOpen(true);
   };
@@ -112,9 +140,14 @@ export function FindJobs({
             against your CVs.
           </p>
         </div>
-        <Button onClick={() => open(null)} className="shrink-0">
-          <Plus className="mr-2 h-4 w-4" /> New search
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button onClick={() => open(null, true)}>
+            <Sparkles className="mr-2 h-4 w-4" /> Job list from my CVs
+          </Button>
+          <Button variant="outline" onClick={() => open(null)}>
+            <Plus className="mr-2 h-4 w-4" /> New search
+          </Button>
+        </div>
       </div>
 
       {data.searches.length > 0 && (
@@ -131,7 +164,7 @@ export function FindJobs({
                   )}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {s.keywords}
+                  {titleSummary(s.keywords)}
                   {s.location ? ` · ${s.location}, ${s.radiusKm} km` : " · all of Germany"} ·{" "}
                   {s.sources.map(sourceLabel).join(", ")}
                 </p>
@@ -174,6 +207,7 @@ export function FindJobs({
         onOpenChange={setDialogOpen}
         search={editing}
         hasAdzunaKey={data.hasAdzunaKey}
+        suggestOnOpen={fromCvs}
         onSaved={(id, runNow) => {
           setDialogOpen(false);
           if (runNow) void run(id);

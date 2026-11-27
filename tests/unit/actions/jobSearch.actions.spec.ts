@@ -54,7 +54,7 @@ describe("job search actions", () => {
     const data = db.jobSearch.create.mock.calls[0][0].data;
     expect(data).toMatchObject({
       userId: "user-1",
-      keywords: "IT-Administrator, SOC",
+      keywords: "IT-Administrator\nSOC",
       sources: JSON.stringify(["bundesagentur", "personio", "smartrecruiters"]),
     });
     expect(JSON.parse(data.companies)).toEqual({ personio: ["proact", "acme"], smartrecruiters: ["BoschGroup"] });

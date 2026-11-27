@@ -64,13 +64,13 @@ describe("runJobSearch", () => {
 
   const sources = () => ({
     bundesagentur: vi.fn(async () => [
-      { title: "IT-Administrator (m/w/d)", company: "ACME GmbH", location: "Köln", url: "https://www.arbeitsagentur.de/jobsuche/jobdetail/1-S" },
-      { title: "SOC Analyst", company: "Beta", location: "Köln", url: "https://www.arbeitsagentur.de/jobsuche/jobdetail/2-S" },
+      { keyword: "IT-Administrator", title: "IT-Administrator (m/w/d)", company: "ACME GmbH", location: "Köln", url: "https://www.arbeitsagentur.de/jobsuche/jobdetail/1-S" },
+      { keyword: "SOC", title: "SOC Analyst", company: "Beta", location: "Köln", url: "https://www.arbeitsagentur.de/jobsuche/jobdetail/2-S" },
     ]),
     // The same ACME job again (other site, same title and company), plus a new one with its description
     arbeitnow: vi.fn(async () => [
-      { title: "IT-Administrator (w/m/d)", company: "ACME GmbH", location: "Köln", url: "https://www.arbeitnow.com/jobs/acme" },
-      { title: "IT-Administrator Linux", company: "Gamma", location: "Köln", url: "https://www.arbeitnow.com/jobs/gamma?utm_source=x", description: LONG },
+      { keyword: "IT-Administrator", title: "IT-Administrator (w/m/d)", company: "ACME GmbH", location: "Köln", url: "https://www.arbeitnow.com/jobs/acme" },
+      { keyword: "IT-Administrator", title: "IT-Administrator Linux", company: "Gamma", location: "Köln", url: "https://www.arbeitnow.com/jobs/gamma?utm_source=x", description: LONG },
     ]),
     recruitee: vi.fn(async () => {
       throw new Error("Not found (404). Check the company name.");
@@ -109,6 +109,11 @@ describe("runJobSearch", () => {
       },
     });
     expect(JSON.parse(h.search.lastRun).added).toBe(3);
+    // Per title, across sites (the fake sources tag their hits)
+    expect(summary?.titles).toEqual({
+      "IT-Administrator": { found: 3, added: 2 },
+      SOC: { found: 1, added: 1 },
+    });
     expect(ensureRankingWorker).toHaveBeenCalledWith("rk-1");
   });
 

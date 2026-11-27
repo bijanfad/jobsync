@@ -68,6 +68,7 @@ describe("searchBundesagentur", () => {
     });
     expect(init.headers["X-API-Key"]).toBe("jobboerse-jobsuche");
     expect(hits[0]).toEqual({
+      keyword: "IT-Administrator",
       title: "IT-Administrator (m/w/d)",
       company: "SEJ GmbH",
       location: "Köln",
@@ -231,3 +232,36 @@ describe("career pages", () => {
     expect(hits.map((h) => h.url)).toEqual(["https://job-boards.greenhouse.io/celonis/jobs/1"]);
   });
 });
+
+describe("long job lists", () => {
+  it("searches every title on its own, each with a share of the budget", async () => {
+    const titles = Array.from({ length: 40 }, (_, i) => `Title ${i}`);
+    const fetchImpl: any = vi.fn(async (url: string) => {
+      const was = new URL(url).searchParams.get("was");
+      return json({
+        maxErgebnisse: 500,
+        ergebnisliste: Array.from({ length: 50 }, (_, i) => ({ referenznummer: `${was}-${i}`, stellenangebotsTitel: `${was} job` })),
+      });
+    });
+    const hits = await searchBundesagentur(query({ keywords: titles }), ctx(fetchImpl));
+    // 2,000 jobs over 40 titles: 50 each, one page of 50
+    expect(fetchImpl).toHaveBeenCalledTimes(40);
+    expect(new URL(fetchImpl.mock.calls[0][0]).searchParams.get("size")).toBe("50");
+    expect(new Set(hits.map((h) => h.keyword)).size).toBe(40);
+    expect(hits).toHaveLength(2000);
+  });
+
+  it("tags feed jobs with the title that matched", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      json({
+        data: [
+          { title: "Netzwerkadministrator (m/w/d)", location: "Köln", url: "https://www.arbeitnow.com/jobs/n", created_at: Math.floor(now.getTime() / 1000) },
+        ],
+        links: { next: null },
+      }),
+    );
+    const hits = await searchArbeitnow(query({ keywords: ["Systemadministrator", "Netzwerkadministrator"] }), ctx(fetchImpl));
+    expect(hits[0].keyword).toBe("Netzwerkadministrator");
+  });
+});
+

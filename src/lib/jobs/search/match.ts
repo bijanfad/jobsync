@@ -12,11 +12,15 @@ const fold = (s: string) =>
     .replace(/[̀-ͯ]/g, "")
     .replace(/ß/g, "ss");
 
-/** True when the title (or tags) names any keyword. "IT-Admin" matches "IT Administrator". */
-export function matchesKeywords(text: string, keywords: string[]): boolean {
-  if (keywords.length === 0) return true;
+/** The first keyword the title (or tags) names. "IT-Admin" matches "IT Administrator". */
+export function matchingKeyword(text: string, keywords: string[]): string | undefined {
   const hay = fold(text).replace(/[-_/]+/g, " ");
-  return keywords.some((k) => hay.includes(fold(k).replace(/[-_/]+/g, " ").trim()));
+  return keywords.find((k) => hay.includes(fold(k).replace(/[-_/]+/g, " ").trim()));
+}
+
+/** True when the title (or tags) names any keyword; no keywords match everything. */
+export function matchesKeywords(text: string, keywords: string[]): boolean {
+  return keywords.length === 0 || matchingKeyword(text, keywords) !== undefined;
 }
 
 /**
