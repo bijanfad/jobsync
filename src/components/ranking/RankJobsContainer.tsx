@@ -14,7 +14,7 @@ import type { RankingSummary } from "@/models/jobRanking.model";
 import { DeleteAlertDialog } from "@/components/DeleteAlertDialog";
 import { RankingUpload } from "./RankingUpload";
 import { FindJobs } from "./FindJobs";
-import type { JobSearchView } from "@/models/jobSearch.model";
+import type { JobSearchesData } from "@/models/jobSearch.model";
 import { RankingProgress, rankingStatusLabel } from "./RankingProgress";
 
 export function RankJobsContainer({
@@ -22,7 +22,7 @@ export function RankJobsContainer({
   searches,
 }: {
   rankings: RankingSummary[];
-  searches: { searches: JobSearchView[]; hasAdzunaKey: boolean };
+  searches: JobSearchesData;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<RankingSummary | null>(null);

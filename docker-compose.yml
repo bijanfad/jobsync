@@ -51,6 +51,13 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - RAPIDAPI_KEY=${RAPIDAPI_KEY:-}
+      # Email for Find jobs alerts (Gmail: an app password, see .env.example)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TO=${SMTP_TO:-}
     volumes:
       # Permanent: uploaded resumes live here.
       - ./jobsyncdb/data:/data

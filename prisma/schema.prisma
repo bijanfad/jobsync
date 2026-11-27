@@ -625,11 +625,11 @@ model Notification {
   id           String     @id @default(uuid())
   userId       String
   user         User       @relation(fields: [userId], references: [id])
-  automationId String
-  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  automationId String? // null for Find jobs alerts (kind "search")
+  automation   Automation? @relation(fields: [automationId], references: [id], onDelete: Cascade)
   runId        String? // last run that produced/refreshed it; plain id, no FK
 
-  kind        String // "run" | "error" | "board"
+  kind        String // "run" | "error" | "board" | "search"
   boardToken  String? // set only for kind "board"; the D2 refresh key
   payload     String // JSON, shape per kind in notification.model.ts
   occurrences Int     @default(1)
@@ -792,6 +792,7 @@ model JobRankingRow {
 
   jobId  String? // set once added to My Jobs; plain id, no FK
   source String? // where a Find jobs search found it ("Bundesagentur", "Personio", ...); null for CSV rows
+  foundAt DateTime? // when a Find jobs run added it; drives the "New" label and the email
 
   @@index([rankingId, loadStatus])
   @@index([rankingId, scoredAt])
@@ -817,6 +818,9 @@ model JobSearch {
   status     String    @default("idle") // "idle" | "running"
   lastRunAt  DateTime?
   lastRun    String? // JSON: SearchRunSummary
+  emailAlerts        Boolean   @default(false)
+  emailMinScore      Int       @default(60)
+  digestPendingSince DateTime? // set when a run adds jobs; cleared once the email went out
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 

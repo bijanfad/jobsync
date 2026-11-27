@@ -15,6 +15,7 @@ import {
 import {
   sourceLabel,
   splitKeywords,
+  type JobSearchesData,
   type JobSearchView,
   type SearchSourceId,
 } from "@/models/jobSearch.model";
@@ -75,7 +76,7 @@ function LastRun({ search }: { search: JobSearchView }) {
 export function FindJobs({
   initial,
 }: {
-  initial: { searches: JobSearchView[]; hasAdzunaKey: boolean };
+  initial: JobSearchesData;
 }) {
   const [data, setData] = useState(initial);
   const [editing, setEditing] = useState<JobSearchView | null>(null);
@@ -207,6 +208,7 @@ export function FindJobs({
         onOpenChange={setDialogOpen}
         search={editing}
         hasAdzunaKey={data.hasAdzunaKey}
+        email={data.email}
         suggestOnOpen={fromCvs}
         onSaved={(id, runNow) => {
           setDialogOpen(false);

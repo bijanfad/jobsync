@@ -33,9 +33,11 @@ vi.mock("@/lib/db", () => ({
       }),
     },
     apiKey: { findUnique: vi.fn(async () => ({ encryptedKey: "x", iv: "y" })) },
+    notification: { create: vi.fn(async ({ data }: any) => data) },
   },
 }));
 
+import db from "@/lib/db";
 import { ensureRankingWorker } from "@/lib/jobs/ranking/worker";
 import { runJobSearch } from "@/lib/jobs/search/run";
 
@@ -59,6 +61,8 @@ describe("runJobSearch", () => {
       daily: true,
       rankingId: null,
       status: "idle",
+      emailAlerts: false,
+      digestPendingSince: null,
     };
   });
 
@@ -115,6 +119,40 @@ describe("runJobSearch", () => {
       SOC: { found: 1, added: 1 },
     });
     expect(ensureRankingWorker).toHaveBeenCalledWith("rk-1");
+  });
+
+  it("marks new jobs, rings the bell and, with email on, owes an email", async () => {
+    h.search.emailAlerts = true;
+    const now = new Date("2026-11-26T12:00:00Z");
+    await runJobSearch("s-1", { sources: sources() as any, now });
+
+    expect(h.rows.every((r) => r.foundAt === now)).toBe(true);
+    expect(db.notification.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        kind: "search",
+        payload: JSON.stringify({ searchId: "s-1", searchName: "IT admin Köln", rankingId: "rk-1", added: 3 }),
+        occurredAt: now,
+      },
+    });
+    expect(h.search.digestPendingSince).toBe(now);
+
+    // A second run before the email goes out keeps the first mark.
+    h.search.keywords = "SOC";
+    await runJobSearch("s-1", {
+      sources: { ...sources(), bundesagentur: vi.fn(async () => [{ keyword: "SOC", title: "SOC Lead", company: "Delta", url: "https://x.de/j/9" }]) } as any,
+      now: new Date("2026-11-26T15:00:00Z"),
+    });
+    expect(h.search.digestPendingSince).toBe(now);
+  });
+
+  it("stays quiet when nothing new turned up, and owes no email with email off", async () => {
+    await runJobSearch("s-1", { sources: sources() as any });
+    expect(db.notification.create).toHaveBeenCalledTimes(1);
+    expect(h.search.digestPendingSince).toBeNull();
+    vi.clearAllMocks();
+    await runJobSearch("s-1", { sources: sources() as any });
+    expect(db.notification.create).not.toHaveBeenCalled();
   });
 
   it("skips jobs found on an earlier run", async () => {

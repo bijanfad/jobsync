@@ -7,13 +7,20 @@ export const metadata: Metadata = {
   title: "Ranked jobs | JobSync",
 };
 
-export default async function RankingPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RankingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ new?: string }>;
+}) {
   const { id } = await params;
-  const result = await getRanking(id);
+  const newOnly = (await searchParams).new === "1";
+  const result = await getRanking(id, 1, newOnly ? { newOnly } : {});
   if (!result.success || !result.data) notFound();
   return (
     <div className="col-span-3">
-      <RankingDetail rankingId={id} initial={result.data} />
+      <RankingDetail rankingId={id} initial={result.data} initialNewOnly={newOnly} />
     </div>
   );
 }

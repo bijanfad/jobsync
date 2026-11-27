@@ -1,4 +1,4 @@
-export type NotificationKind = "run" | "error" | "board";
+export type NotificationKind = "run" | "error" | "board" | "search";
 
 export type BoardErrorCode =
   | "not_found"
@@ -34,18 +34,26 @@ export interface BoardPayload extends BoardFailurePayload {
   provider: string; // display label, e.g. "Greenhouse"
 }
 
+/** A Find jobs run that added jobs to its results. */
+export interface SearchPayload {
+  searchId: string;
+  searchName: string;
+  rankingId: string;
+  added: number;
+}
+
 export type NotificationTab = "all" | "unread" | "errors" | "runs";
 
 export interface NotificationItem {
   id: string;
   kind: NotificationKind;
-  payload: RunPayload | ErrorPayload | BoardPayload;
+  payload: RunPayload | ErrorPayload | BoardPayload | SearchPayload;
   occurrences: number;
   occurredAt: Date;
   createdAt: Date;
   readAt: Date | null;
   dismissedAt: Date | null;
-  automation: { id: string; name: string };
+  automation: { id: string; name: string } | null; // null for kind "search"
 }
 
 export interface NotificationSummary {

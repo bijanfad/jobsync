@@ -7,6 +7,7 @@ import { createJobFromNames } from "@/lib/jobs/createJobFromNames";
 import { jobSourceLabelFromUrl } from "@/lib/jobs/import/jobSourceFromUrl";
 import { ensureRankingWorker, isRankingWorkerRunning } from "@/lib/jobs/ranking/worker";
 import {
+  NEW_JOB_WINDOW_MS,
   RANKING_LIMITS,
   type RankingRowFilter,
   type RankingRowView,
@@ -245,6 +246,7 @@ const rowViewSelect = {
   scoredAt: true,
   jobId: true,
   source: true,
+  foundAt: true,
 } as const;
 
 export interface RankingPage {
@@ -279,6 +281,7 @@ export async function getRanking(
     }
     if (filter.loadedOnly) where.loadStatus = "loaded";
     if (filter.hideAdded) where.jobId = null;
+    if (filter.newOnly) where.foundAt = { gte: new Date(Date.now() - NEW_JOB_WINDOW_MS) };
     const search = filter.search?.trim().slice(0, 100);
     if (search) {
       where.OR = [

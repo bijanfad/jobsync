@@ -4,6 +4,7 @@ import type {
   ErrorPayload,
   NotificationItem,
   RunPayload,
+  SearchPayload,
 } from "@/models/notification.model";
 
 const BOARD_COPY: Record<BoardErrorCode, string> = {
@@ -20,12 +21,34 @@ const monthDay = (d: Date) =>
   d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export function isErrorNotification(n: NotificationItem): boolean {
-  return n.kind !== "run";
+  return n.kind === "error" || n.kind === "board";
+}
+
+/** What the row is about: the automation, or the Find jobs search. */
+export function notificationSourceName(n: NotificationItem): string {
+  if (n.automation) return n.automation.name;
+  if (n.kind === "search") return (n.payload as SearchPayload).searchName || "Find jobs";
+  return "Deleted automation";
 }
 
 export function describeNotification(n: NotificationItem) {
-  const base = `/dashboard/automations/${n.automation.id}`;
-  const name = `“${n.automation.name}”`;
+  if (n.kind === "search") {
+    const p = n.payload as SearchPayload;
+    return {
+      icon: "run" as const,
+      title: `Find jobs: “${p.searchName}”`,
+      lead: `${plural(p.added, "new job")} found`,
+      detail: " · scoring against your CVs",
+      hint: null,
+      link: {
+        label: `See ${p.added === 1 ? "the new job" : "new jobs"}`,
+        href: `/dashboard/rank-jobs/${p.rankingId}?new=1`,
+      },
+    };
+  }
+
+  const base = `/dashboard/automations/${n.automation?.id ?? ""}`;
+  const name = `“${notificationSourceName(n)}”`;
 
   if (n.kind === "board") {
     const p = n.payload as BoardPayload;

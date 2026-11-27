@@ -3,6 +3,7 @@ import {
   formatShortAge,
   groupByDay,
   isErrorNotification,
+  notificationSourceName,
 } from "@/components/notifications/notificationDisplay";
 import type { NotificationItem } from "@/models/notification.model";
 
@@ -29,6 +30,24 @@ const item = (over: Partial<NotificationItem>): NotificationItem => ({
 });
 
 describe("describeNotification", () => {
+  it("a Find jobs run links to its new jobs", () => {
+    const n = item({
+      kind: "search",
+      automation: null,
+      payload: { searchId: "s-1", searchName: "IT admin Köln", rankingId: "rk-1", added: 7 },
+    });
+    expect(describeNotification(n)).toEqual({
+      icon: "run",
+      title: "Find jobs: “IT admin Köln”",
+      lead: "7 new jobs found",
+      detail: " · scoring against your CVs",
+      hint: null,
+      link: { label: "See new jobs", href: "/dashboard/rank-jobs/rk-1?new=1" },
+    });
+    expect(notificationSourceName(n)).toBe("IT admin Köln");
+    expect(isErrorNotification(n)).toBe(false);
+  });
+
   it("run with saves links to the automation's jobs tab", () => {
     expect(describeNotification(item({}))).toEqual({
       icon: "run",

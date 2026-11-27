@@ -54,6 +54,17 @@ export interface RankingRowView {
   scoredAt: Date | null;
   jobId: string | null;
   source: string | null;
+  /** When a Find jobs run added it; null for CSV rows. */
+  foundAt: Date | null;
+}
+
+/** A job counts as "New" for this long after a search found it. */
+export const NEW_JOB_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export function isNewJob(foundAt: Date | string | null | undefined, now = Date.now()): boolean {
+  if (!foundAt) return false;
+  const t = new Date(foundAt).getTime();
+  return Number.isFinite(t) && now - t < NEW_JOB_WINDOW_MS;
 }
 
 export interface RankingRowFilter {
@@ -63,6 +74,8 @@ export interface RankingRowFilter {
   loadedOnly?: boolean;
   /** Hide rows already added to My Jobs. */
   hideAdded?: boolean;
+  /** Only rows a search found in the last 24 hours. */
+  newOnly?: boolean;
 }
 
 export const RANKING_LIMITS = {

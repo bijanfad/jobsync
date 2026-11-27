@@ -17,6 +17,7 @@ import {
   SEARCH_LIMITS,
   SEARCH_SOURCE_IDS,
   splitKeywords,
+  type JobSearchesData,
   type JobSearchInput,
   type JobSearchView,
   type SearchCompanies,
@@ -26,6 +27,7 @@ import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { suggestTitlesFromCvs, type SuggestedTitle } from "@/lib/jobs/search/suggestTitles";
 import type { ActionResult } from "@/models/action.model";
 import { requireUser } from "./shared";
+import { alertRecipient, isEmailConfigured, sendMail } from "@/lib/email/mailer";
 
 const fail = (message: string) => ({ success: false as const, message });
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
@@ -63,6 +65,8 @@ const SearchInputSchema = z.object({
   sources: z.array(z.enum(SEARCH_SOURCE_IDS as [string, ...string[]])).min(1, "Pick at least one site."),
   companies: z.record(z.string(), z.array(z.string())),
   daily: z.boolean(),
+  emailAlerts: z.boolean().optional(),
+  emailMinScore: z.number().int().min(0).max(100).optional(),
 });
 
 function toView(s: {
@@ -75,6 +79,8 @@ function toView(s: {
   sources: string;
   companies: string;
   daily: boolean;
+  emailAlerts: boolean;
+  emailMinScore: number;
   rankingId: string | null;
   status: string;
   lastRunAt: Date | null;
@@ -90,6 +96,8 @@ function toView(s: {
     sources: parseSources(s.sources),
     companies: parseCompanies(s.companies),
     daily: s.daily,
+    emailAlerts: s.emailAlerts,
+    emailMinScore: s.emailMinScore,
     rankingId: s.rankingId,
     status: s.status === "running" || isSearchRunning(s.id) ? "running" : "idle",
     lastRunAt: s.lastRunAt,
@@ -97,9 +105,7 @@ function toView(s: {
   };
 }
 
-export async function getJobSearches(): Promise<
-  ActionResult<{ searches: JobSearchView[]; hasAdzunaKey: boolean }>
-> {
+export async function getJobSearches(): Promise<ActionResult<JobSearchesData>> {
   try {
     const user = await requireUser();
     const [searches, adzuna] = await Promise.all([
@@ -109,7 +115,14 @@ export async function getJobSearches(): Promise<
       }),
       prisma.apiKey.count({ where: { userId: user.id, provider: ADZUNA_KEY_PROVIDER } }),
     ]);
-    return { success: true, data: { searches: searches.map(toView), hasAdzunaKey: adzuna > 0 } };
+    return {
+      success: true,
+      data: {
+        searches: searches.map(toView),
+        hasAdzunaKey: adzuna > 0,
+        email: { configured: isEmailConfigured(), to: alertRecipient(user.email) },
+      },
+    };
   } catch (error) {
     log.error("Get job searches failed", { error: String(error) });
     return fail("Couldn't load your searches.");
@@ -155,6 +168,10 @@ export async function saveJobSearch(
       sources: JSON.stringify(data.sources),
       companies: JSON.stringify(companies),
       daily: data.daily,
+      emailAlerts: data.emailAlerts ?? false,
+      emailMinScore: data.emailMinScore ?? 60,
+      // Turning alerts off drops an email that was still owed.
+      ...(data.emailAlerts ? {} : { digestPendingSince: null }),
     };
     let saved;
     if (id) {
@@ -264,5 +281,28 @@ export async function suggestJobTitles(): Promise<ActionResult<SuggestedTitle[]>
     }
     log.error("Suggest job titles failed", { error: String(error) });
     return fail("The AI couldn't read your CVs this time. Try again, or check your AI Settings.");
+  }
+}
+
+/** Sends a short email so the person can see the Gmail settings work. */
+export async function sendTestEmail(): Promise<ActionResult<{ to: string }>> {
+  try {
+    const user = await requireUser();
+    if (!isEmailConfigured()) {
+      return fail("Email is not set up yet. Add SMTP_USER and SMTP_PASS to your .env file and restart JobSync.");
+    }
+    const to = alertRecipient(user.email);
+    if (!to) return fail("There is no address to send to. Add SMTP_TO to your .env file.");
+    await sendMail({
+      to,
+      subject: "JobSync: test email",
+      text: "This is a test from JobSync. Email alerts for Find jobs are working.",
+      html: "<p>This is a test from JobSync. Email alerts for <b>Find jobs</b> are working.</p>",
+    });
+    return { success: true, data: { to } };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.error("Test email failed", { error: message });
+    return fail(message);
   }
 }

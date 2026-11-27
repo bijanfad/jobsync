@@ -96,11 +96,23 @@ export interface JobSearchView {
   sources: SearchSourceId[];
   companies: SearchCompanies;
   daily: boolean;
+  emailAlerts: boolean;
+  emailMinScore: number;
   rankingId: string | null;
   status: "idle" | "running";
   lastRunAt: Date | null;
   lastRun: SearchRunSummary | null;
 }
+
+export interface JobSearchesData {
+  searches: JobSearchView[];
+  hasAdzunaKey: boolean;
+  /** Whether SMTP is set up in .env, and where alerts would go. */
+  email: { configured: boolean; to: string | null };
+}
+
+/** Minimum score choices for "Email me new matches". */
+export const EMAIL_MIN_SCORES = [40, 50, 60, 70, 80] as const;
 
 export interface JobSearchInput {
   name: string;
@@ -111,6 +123,8 @@ export interface JobSearchInput {
   sources: SearchSourceId[];
   companies: SearchCompanies;
   daily: boolean;
+  emailAlerts?: boolean;
+  emailMinScore?: number;
 }
 
 export const SEARCH_LIMITS = {

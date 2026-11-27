@@ -258,6 +258,8 @@ async function runRanking(rankingId: string): Promise<void> {
           data: { status: "done", error: null },
         });
         log.info("[Ranking] Done", { "ranking.id": rankingId });
+        // A Find jobs search may owe an email about these jobs.
+        void import("@/lib/jobs/search/digest").then((m) => m.sendDueDigests());
         return;
       }
     }
